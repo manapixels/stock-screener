@@ -68,6 +68,31 @@ export const getStockDetails = async (symbol: string) => {
   }
 }
 
+// Get current stock price and price changes
+export const getStockPrice = async (symbol: string) => {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-price`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ symbol }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error fetching stock price:', error)
+    throw error
+  }
+}
+
 // Watchlist functions
 export const addWatchlistItem = async (symbol: string, companyName: string) => {
   const authResult = await getAuthenticatedUser()

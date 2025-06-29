@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './AuthProvider'
-import { getWatchlist, removeWatchlistItem, isAuthError } from '@/lib/api'
+import { getWatchlist, removeWatchlistItem, getStockPrice, isAuthError } from '@/lib/api'
 import { Button } from './ui/button'
 import { toast } from 'sonner'
 
@@ -11,6 +11,20 @@ interface WatchlistItem {
   symbol: string
   company_name: string
   created_at: string
+}
+
+interface PriceData {
+  currentPrice: number
+  changes: {
+    oneDay: { change: number; changePercent: number }
+    oneWeek: { change: number; changePercent: number }
+    oneMonth: { change: number; changePercent: number }
+  }
+}
+
+interface WatchlistItemWithPrice extends WatchlistItem {
+  priceData?: PriceData
+  priceLoading?: boolean
 }
 
 function AuthPrompt() {
@@ -34,7 +48,7 @@ function AuthPrompt() {
 }
 
 export default function Watchlist() {
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [watchlist, setWatchlist] = useState<WatchlistItemWithPrice[]>([])
   const [loading, setLoading] = useState(false)
   const { user } = useAuth()
 
@@ -48,7 +62,16 @@ export default function Watchlist() {
         // Auth error handled by AuthGuard, just return
         return
       }
-      setWatchlist(result)
+      
+      // Initialize watchlist with loading states
+      const watchlistWithPrice: WatchlistItemWithPrice[] = result.map((item: WatchlistItem) => ({
+        ...item,
+        priceLoading: true
+      }))
+      setWatchlist(watchlistWithPrice)
+      
+      // Fetch prices for each stock
+      fetchPricesForWatchlist(result)
     } catch (error) {
       console.error('Error fetching watchlist:', error)
       toast.error('Failed to load watchlist')
@@ -56,6 +79,31 @@ export default function Watchlist() {
       setLoading(false)
     }
   }, [user])
+
+  const fetchPricesForWatchlist = async (watchlistItems: WatchlistItem[]) => {
+    // Fetch prices for all stocks concurrently
+    const pricePromises = watchlistItems.map(async (item) => {
+      try {
+        const priceData = await getStockPrice(item.symbol)
+        return { symbol: item.symbol, priceData }
+      } catch (error) {
+        console.error(`Error fetching price for ${item.symbol}:`, error)
+        return { symbol: item.symbol, priceData: null }
+      }
+    })
+
+    const priceResults = await Promise.all(pricePromises)
+    
+    // Update watchlist with price data
+    setWatchlist(prev => prev.map(item => {
+      const priceResult = priceResults.find(p => p.symbol === item.symbol)
+      return {
+        ...item,
+        priceData: priceResult?.priceData || undefined,
+        priceLoading: false
+      }
+    }))
+  }
 
   useEffect(() => {
     fetchWatchlist()
@@ -99,18 +147,64 @@ export default function Watchlist() {
       ) : (
         <div className="space-y-2">
           {watchlist.map((item) => (
-            <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-              <div>
-                <span className="font-medium text-blue-600">{item.symbol}</span>
-                <p className="text-sm text-gray-600">{item.company_name}</p>
+            <div key={item.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-medium text-blue-600">{item.symbol}</span>
+                  <span className="text-sm text-gray-600">{item.company_name}</span>
+                </div>
+                
+                {item.priceLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    <span className="text-sm text-gray-500">Loading price...</span>
+                  </div>
+                ) : item.priceData ? (
+                  <div className="grid grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500 block">Price</span>
+                      <span className="font-medium">${item.priceData.currentPrice}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">1D</span>
+                      <span className={`font-medium ${item.priceData.changes.oneDay.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.priceData.changes.oneDay.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneDay.changePercent}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">1W</span>
+                      <span className={`font-medium ${item.priceData.changes.oneWeek.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.priceData.changes.oneWeek.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneWeek.changePercent}%
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block">1M</span>
+                      <span className={`font-medium ${item.priceData.changes.oneMonth.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {item.priceData.changes.oneMonth.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneMonth.changePercent}%
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-sm text-gray-500">Price data unavailable</span>
+                )}
               </div>
-              <Button
-                onClick={() => handleRemove(item.id)}
-                variant="destructive"
-                size="sm"
-              >
-                Remove
-              </Button>
+              
+              <div className="flex gap-2 ml-4">
+                <Button
+                  onClick={() => window.open(`/stock/${item.symbol}`, '_blank')}
+                  variant="outline"
+                  size="sm"
+                >
+                  View
+                </Button>
+                <Button
+                  onClick={() => handleRemove(item.id)}
+                  variant="destructive"
+                  size="sm"
+                >
+                  Remove
+                </Button>
+              </div>
             </div>
           ))}
         </div>

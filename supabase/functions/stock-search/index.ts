@@ -52,8 +52,24 @@ serve(async (req) => {
       )
     }
 
+    // Transform the data structure to match UI expectations
+    const transformedData = {
+      ...data,
+      bestMatches: data.bestMatches?.map((match: any) => ({
+        symbol: match['1. symbol'],
+        name: match['2. name'],
+        type: match['3. type'],
+        region: match['4. region'],
+        marketOpen: match['5. marketOpen'],
+        marketClose: match['6. marketClose'],
+        timezone: match['7. timezone'],
+        currency: match['8. currency'],
+        matchScore: match['9. matchScore'],
+      })) || []
+    }
+
     return new Response(
-      JSON.stringify(data),
+      JSON.stringify(transformedData),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error) {

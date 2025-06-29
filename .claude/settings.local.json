@@ -19,7 +19,11 @@
       "Bash(node:*)",
       "Bash(pip install:*)",
       "Bash(touch:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "WebFetch(domain:claude.ai)",
+      "Bash(npx supabase functions logs:*)",
+      "Bash(npx supabase:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
