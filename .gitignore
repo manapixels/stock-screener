@@ -2,19 +2,7 @@
 node_modules
 .next
 .env
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-venv/
-.venv/
-
-# IDEs
-.idea/
-.vscode/
+.env.local
 
 # OS generated files
 .DS_Store
