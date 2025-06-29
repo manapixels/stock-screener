@@ -18,10 +18,11 @@ async function getAuthenticatedUser() {
   return { user }
 }
 
-// Stock search function
+// Stock search function - Primary: Yahoo Finance, Backup: Alpha Vantage
 export const searchStocks = async (query: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-search`, {
+    // Try Yahoo Finance first
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-search`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
@@ -43,10 +44,11 @@ export const searchStocks = async (query: string) => {
   }
 }
 
-// Get stock details function  
+// Get stock details function - Primary: Yahoo Finance, Backup: Alpha Vantage
 export const getStockDetails = async (symbol: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-details`, {
+    // Try simplified Yahoo Finance endpoint first
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/simple-stock-data`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
@@ -68,10 +70,11 @@ export const getStockDetails = async (symbol: string) => {
   }
 }
 
-// Get current stock price and price changes
+// Get current stock price and price changes - Primary: Yahoo Finance, Backup: Alpha Vantage
 export const getStockPrice = async (symbol: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-price`, {
+    // Try Yahoo Finance first
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-price`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
@@ -184,13 +187,14 @@ export const getStockNote = async (symbol: string) => {
       .select('*')
       .eq('user_id', authResult.user.id)
       .eq('symbol', symbol)
-      .single()
+      .order('created_at', { ascending: false })
+      .limit(1)
 
-    if (error && error.code !== 'PGRST116') throw error
-    return data
+    if (error) throw error
+    return data && data.length > 0 ? data[0] : null
   } catch (error) {
     console.error('Error fetching stock note:', error)
-    throw error
+    return null // Return null instead of throwing for missing notes
   }
 }
 

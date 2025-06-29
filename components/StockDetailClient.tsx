@@ -8,7 +8,9 @@ import { analyzeStock, formatNumber } from '@/lib/stock-analysis';
 import { MetricCard } from '@/components/ui/metric-card';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { RecommendationBadge } from '@/components/ui/recommendation-badge';
-import { ThesisSection } from '@/components/ui/thesis-section';
+import { BullCase } from '@/components/ui/bull-case';
+import { BearCase } from '@/components/ui/bear-case';
+import { InvestmentVerdict } from '@/components/ui/investment-verdict';
 import { toast } from 'sonner';
 
 // Note: Using any for external API data with complex/unknown structure
@@ -24,13 +26,15 @@ interface StockDetails {
 
 interface StockDetailClientProps {
   symbol: string;
+  onPriceUpdate?: (price: number) => void;
 }
 
-export default function StockDetailClient({ symbol }: StockDetailClientProps) {
+export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetailClientProps) {
   const [stockDetails, setStockDetails] = useState<StockDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>('');
+  const [chartPeriod, setChartPeriod] = useState<'1W' | '1M' | '1Y'>('1M');
 
   useEffect(() => {
     if (!symbol) return;
@@ -58,6 +62,18 @@ export default function StockDetailClient({ symbol }: StockDetailClientProps) {
 
     fetchDetails();
   }, [symbol]);
+
+  // Calculate current price when stockDetails changes
+  const currentPrice = stockDetails?.currentPrice || 
+    (stockDetails?.daily_data?.['Time Series (Daily)'] ? 
+      parseFloat((Object.values(stockDetails.daily_data['Time Series (Daily)'])[0] as any)?.['4. close'] || '0') : 0);
+
+  // Update parent component with current price
+  useEffect(() => {
+    if (currentPrice > 0 && onPriceUpdate) {
+      onPriceUpdate(currentPrice);
+    }
+  }, [currentPrice, onPriceUpdate]);
 
   const handleSaveNote = async () => {
     try {
@@ -97,23 +113,111 @@ export default function StockDetailClient({ symbol }: StockDetailClientProps) {
     );
   }
 
-  // Get current price from daily data
-  const dailyData = stockDetails.daily_data?.['Time Series (Daily)'];
-  const currentPrice = dailyData ? parseFloat((Object.values(dailyData)[0] as any)?.['4. close'] || '0') : 0;
-
   // Generate analysis
   const analysis = analyzeStock(stockDetails, currentPrice);
 
-  // Format chart data
-  const chartData = dailyData ? Object.entries(dailyData)
-    .map(([date, data]: [string, any]) => ({
-      date: new Date(date).toLocaleDateString(),
-      price: parseFloat(data['4. close']),
-      volume: parseInt(data['5. volume'])
-    }))
-    .reverse()
-    .slice(-30) // Last 30 days
-    : [];
+  // Format chart data based on selected period
+  const dailyData = stockDetails.daily_data?.['Time Series (Daily)'];
+  
+  const getChartData = () => {
+    if (!dailyData) return [];
+    
+    const allData = Object.entries(dailyData)
+      .map(([date, data]: [string, any]) => ({
+        date: date, // Keep original date for 1Y, format others
+        displayDate: formatDateForChart(new Date(date), chartPeriod),
+        fullDate: new Date(date),
+        price: parseFloat(data['4. close']),
+        volume: parseInt(data['5. volume'])
+      }))
+      .sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
+    
+    // Get data based on selected period
+    const now = new Date();
+    let daysBack: number;
+    
+    switch (chartPeriod) {
+      case '1W':
+        daysBack = 7;
+        break;
+      case '1M':
+        daysBack = 30;
+        break;
+      case '1Y':
+        daysBack = 365;
+        break;
+      default:
+        daysBack = 30;
+    }
+    
+    return allData.slice(-daysBack);
+  };
+
+  // Format dates appropriately for each chart period
+  const formatDateForChart = (date: Date, period: '1W' | '1M' | '1Y') => {
+    switch (period) {
+      case '1W':
+        // Show day names for 1 week view
+        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      case '1M':
+        // Show month/day for 1 month view
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      case '1Y':
+        // Show month/year for 1 year view
+        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      default:
+        return date.toLocaleDateString();
+    }
+  };
+
+  // Get appropriate tick count for X-axis based on period
+  const getTickCount = () => {
+    switch (chartPeriod) {
+      case '1W':
+        return 7; // Show all days for 1 week
+      case '1M':
+        return 6; // Show ~5-6 ticks for 1 month
+      case '1Y':
+        return 12; // Show ~12 months for 1 year
+      default:
+        return 6;
+    }
+  };
+
+  // Custom tick formatter for 1Y that prevents duplicates
+  const formatYearTick = (value: string, index: number, ticks: any[]) => {
+    if (chartPeriod !== '1Y') return value;
+    
+    const date = new Date(value);
+    const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    
+    // Check if this month-year combo has already been shown in previous ticks
+    const prevTicks = ticks.slice(0, index);
+    const alreadyShown = prevTicks.some(tick => {
+      const prevDate = new Date(tick.value);
+      const prevMonthYear = prevDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      return prevMonthYear === monthYear;
+    });
+    
+    return alreadyShown ? '' : monthYear;
+  };
+  
+  const chartData = getChartData();
+  
+  // Calculate Y-axis domain for better vertical space usage
+  const getYAxisDomain = () => {
+    if (chartData.length === 0) return ['auto', 'auto'];
+    
+    const prices = chartData.map(d => d.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const padding = (maxPrice - minPrice) * 0.05; // 5% padding
+    
+    return [
+      Math.max(0, minPrice - padding).toFixed(2),
+      (maxPrice + padding).toFixed(2)
+    ];
+  };
 
   const { overview } = stockDetails;
 
@@ -140,25 +244,27 @@ export default function StockDetailClient({ symbol }: StockDetailClientProps) {
         </div>
       </div>
 
-      {/* Recommendation & Health Score */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RecommendationBadge
-            recommendation={analysis.recommendation}
-            confidence={analysis.confidence}
-            reason={analysis.reason}
-            price={currentPrice}
-            targetPrice={analysis.targetPrice}
-          />
-        </div>
-        <div className="flex justify-center">
-          <ScoreGauge
-            score={analysis.financialHealthScore}
-            title="Financial Health"
-            subtitle="Overall Score"
-            size="lg"
-          />
-        </div>
+      {/* Investment Verdict - Actionable Recommendations */}
+      <InvestmentVerdict
+        recommendation={analysis.recommendation}
+        confidence={analysis.confidence}
+        reason={analysis.reason}
+        currentPrice={currentPrice}
+        priceTargets={analysis.priceTargets}
+        targetPrice={analysis.targetPrice}
+        chartData={chartData}
+        chartPeriod={chartPeriod}
+        onPeriodChange={setChartPeriod}
+      />
+
+      {/* Financial Health Score */}
+      <div className="flex justify-center">
+        <ScoreGauge
+          score={analysis.financialHealthScore}
+          title="Financial Health"
+          subtitle="Overall Score"
+          size="lg"
+        />
       </div>
 
       {/* Key Metrics Grid */}
@@ -207,66 +313,19 @@ export default function StockDetailClient({ symbol }: StockDetailClientProps) {
         </div>
       </div>
 
-      {/* Investment Thesis */}
+      {/* Investment Analysis - Bull & Bear Cases */}
       <div>
         <div className="flex items-center gap-2 mb-6">
           <TrendingUp className="h-5 w-5 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">Investment Thesis</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">Investment Analysis</h2>
         </div>
         
-        <ThesisSection 
-          bullCase={analysis.bullCase}
-          bearCase={analysis.bearCase}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <BullCase bullPoints={analysis.bullCase} />
+          <BearCase bearPoints={analysis.bearCase} />
+        </div>
       </div>
 
-      {/* Price Chart */}
-      <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-6">
-          <DollarSign className="h-5 w-5 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">Price Performance (30 Days)</h2>
-        </div>
-        
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis 
-                dataKey="date" 
-                fontSize={12}
-                stroke="#666"
-              />
-              <YAxis 
-                fontSize={12}
-                stroke="#666"
-                domain={['dataMin - 5', 'dataMax + 5']}
-              />
-              <Tooltip 
-                contentStyle={{
-                  backgroundColor: '#fff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}
-              />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="price" 
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 2, fill: '#fff' }}
-                name="Stock Price ($)"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            <p>Price chart data not available</p>
-          </div>
-        )}
-      </div>
 
       {/* Additional Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -47,7 +47,11 @@ function AuthPrompt() {
   )
 }
 
-export default function Watchlist() {
+interface WatchlistProps {
+  compact?: boolean;
+}
+
+export default function Watchlist({ compact = false }: WatchlistProps) {
   const [watchlist, setWatchlist] = useState<WatchlistItemWithPrice[]>([])
   const [loading, setLoading] = useState(false)
   const { user } = useAuth()
@@ -133,8 +137,8 @@ export default function Watchlist() {
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-xl font-bold mb-4">Watchlist</h2>
+    <div className={`bg-white rounded-lg shadow-md ${compact ? 'p-0' : 'p-6'}`}>
+      {!compact && <h2 className="text-xl font-bold mb-4">Watchlist</h2>}
       
       {loading ? (
         <div className="flex justify-center py-8">
@@ -145,9 +149,9 @@ export default function Watchlist() {
           No stocks in your watchlist yet. Add some stocks to get started!
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className={compact ? "space-y-1" : "space-y-2"}>
           {watchlist.map((item) => (
-            <div key={item.id} className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
+            <div key={item.id} className={`flex justify-between items-center ${compact ? 'p-3 hover:bg-gray-50' : 'p-4 bg-gray-50 rounded-lg'}`}>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-blue-600">{item.symbol}</span>

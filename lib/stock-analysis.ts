@@ -19,6 +19,11 @@ interface AnalysisResult {
   bullCase: Array<{ text: string; strength: 'strong' | 'moderate' | 'weak' }>;
   bearCase: Array<{ text: string; strength: 'strong' | 'moderate' | 'weak' }>;
   targetPrice?: number;
+  priceTargets: {
+    goodBuyPrice: number;
+    goodSellPrice: number;
+    currentValue: 'undervalued' | 'fairly_valued' | 'overvalued';
+  };
 }
 
 export function analyzeStock(data: StockData, currentPrice: number): AnalysisResult {
@@ -33,7 +38,7 @@ export function analyzeStock(data: StockData, currentPrice: number): AnalysisRes
   const bullCase = generateBullCase(overview, latestRSI, data.earnings);
   const bearCase = generateBearCase(overview, latestRSI, data.news_sentiment);
   
-  // Generate recommendation
+  // Generate recommendation and price targets
   const { recommendation, confidence, reason, targetPrice } = generateRecommendation(
     overview, 
     latestRSI, 
@@ -43,6 +48,9 @@ export function analyzeStock(data: StockData, currentPrice: number): AnalysisRes
     bearCase.length
   );
 
+  // Calculate price targets
+  const priceTargets = calculatePriceTargets(overview, currentPrice, recommendation, confidence);
+
   return {
     recommendation,
     confidence,
@@ -50,7 +58,8 @@ export function analyzeStock(data: StockData, currentPrice: number): AnalysisRes
     financialHealthScore: healthScore,
     bullCase,
     bearCase,
-    targetPrice
+    targetPrice,
+    priceTargets
   };
 }
 
@@ -305,6 +314,77 @@ function generateRecommendation(
   }
   
   return { recommendation, confidence, reason, targetPrice };
+}
+
+function calculatePriceTargets(
+  overview: any, 
+  currentPrice: number, 
+  recommendation: 'BUY' | 'HOLD' | 'SELL',
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+): { goodBuyPrice: number; goodSellPrice: number; currentValue: 'undervalued' | 'fairly_valued' | 'overvalued' } {
+  
+  // Check if we have rate limit or no data (Alpha Vantage returns Information message when rate limited)
+  const hasRateLimit = overview?.Information && overview.Information.includes('rate limit');
+  
+  let fairValue: number;
+  
+  if (hasRateLimit || !overview || Object.keys(overview).length === 0) {
+    // When rate limited or no data, use current price with reasonable assumptions
+    fairValue = currentPrice;
+    console.log('Using current price as fair value due to rate limit or missing data');
+  } else {
+    // Try to get fundamental data
+    const pe = parseFloat(overview?.PERatio);
+    const eps = parseFloat(overview?.EPS);
+    const bookValue = parseFloat(overview?.BookValue);
+    
+    // Only use fundamental analysis if we have valid data
+    if (pe && eps && pe > 0 && eps > 0) {
+      // DCF-inspired fair value (simplified using P/E and growth assumptions)
+      const industryAvgPE = 18; // Conservative industry average
+      const conservativePE = Math.min(pe * 0.9, industryAvgPE); // 10% discount or industry avg
+      const fairValueFromEarnings = eps * conservativePE;
+      
+      // Book value approach
+      const fairValueFromBook = bookValue && bookValue > 0 ? bookValue * 1.5 : currentPrice;
+      
+      // Average the approaches, weight earnings method more heavily
+      fairValue = (fairValueFromEarnings * 0.7 + fairValueFromBook * 0.3);
+      
+      // Sanity check - if calculated fair value is too far from current price, use current price as base
+      if (fairValue < currentPrice * 0.3 || fairValue > currentPrice * 3) {
+        fairValue = currentPrice;
+      }
+    } else {
+      // Use current price as fair value when fundamental data is unavailable
+      fairValue = currentPrice;
+    }
+  }
+  
+  // Calculate good buy price (15% below fair value)
+  const goodBuyPrice = fairValue * 0.85;
+  
+  // Calculate good sell price (20% above fair value)
+  const goodSellPrice = fairValue * 1.20;
+  
+  // Adjust prices based on confidence
+  const confidenceMultiplier = confidence === 'HIGH' ? 1.05 : confidence === 'LOW' ? 0.95 : 1.0;
+  
+  // Determine current valuation
+  let currentValue: 'undervalued' | 'fairly_valued' | 'overvalued';
+  if (currentPrice < goodBuyPrice * 1.05) { // 5% buffer around good buy price
+    currentValue = 'undervalued';
+  } else if (currentPrice > goodSellPrice * 0.95) { // 5% buffer around good sell price
+    currentValue = 'overvalued';
+  } else {
+    currentValue = 'fairly_valued';
+  }
+  
+  return {
+    goodBuyPrice: Math.round(goodBuyPrice * confidenceMultiplier * 100) / 100,
+    goodSellPrice: Math.round(goodSellPrice * confidenceMultiplier * 100) / 100,
+    currentValue
+  };
 }
 
 export function formatNumber(value: any, type: 'currency' | 'percentage' | 'ratio' | 'number' = 'number'): string {

@@ -24,7 +24,8 @@ create table public.stock_notes (
   symbol text not null,
   note text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  UNIQUE(user_id, symbol)
 );
 
 -- Create alerts table

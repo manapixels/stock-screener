@@ -16,9 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={inter.className}>
         <AuthProvider>
-          <div className="min-h-screen flex flex-col items-center justify-between p-4 md:p-8 lg:p-12">
-            {children}
-          </div>
+          {children}
           <Toaster />
         </AuthProvider>
       </body>
