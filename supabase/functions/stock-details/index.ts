@@ -20,7 +20,7 @@ serve(async (req) => {
       )
     }
 
-    const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY')
+    const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY') || 'demo'
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Alpha Vantage API key not configured' }),

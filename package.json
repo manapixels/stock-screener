@@ -11,6 +11,7 @@
     "seed": "npx supabase db seed",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
+    "supabase:serve": "npx supabase functions serve",
     "supabase:status": "npx supabase status",
     "supabase:restart": "npm run supabase:stop && npm run supabase:start",
     "supabase:db-reset": "npx supabase db reset",

@@ -21,12 +21,14 @@ async function getAuthenticatedUser() {
 // Stock search function
 export const searchStocks = async (query: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-search?query=${encodeURIComponent(query)}`, {
-      method: 'GET',
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-search`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ keywords: query }),
     })
 
     if (!response.ok) {
@@ -44,12 +46,14 @@ export const searchStocks = async (query: string) => {
 // Get stock details function  
 export const getStockDetails = async (symbol: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-details?symbol=${encodeURIComponent(symbol)}`, {
-      method: 'GET',
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-details`, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ symbol }),
     })
 
     if (!response.ok) {

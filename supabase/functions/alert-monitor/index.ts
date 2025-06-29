@@ -1,4 +1,6 @@
+// @ts-ignore: Deno imports
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// @ts-ignore: Deno imports  
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -15,12 +17,7 @@ interface Alert {
   is_active: boolean
 }
 
-interface Profile {
-  telegram_chat_id: string
-  telegram_bot_token: string
-}
-
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -80,7 +77,7 @@ serve(async (req) => {
         console.error(`Error checking alerts for ${symbol}:`, error)
         results.push({
           symbol,
-          error: error.message
+          error: error instanceof Error ? error.message : 'Unknown error'
         })
       }
     }
@@ -96,7 +93,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Alert monitor error:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }

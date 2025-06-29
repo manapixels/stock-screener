@@ -32,9 +32,19 @@ create table public.alerts (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references public.profiles(id) on delete cascade not null,
   symbol text not null,
-  alert_type text not null, -- 'PE_RATIO_BELOW', 'RSI_BELOW', etc.
-  threshold numeric not null,
+  condition text not null, -- 'above', 'below'
+  target_price numeric not null,
+  message text,
   is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Create telegram_settings table
+create table public.telegram_settings (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  chat_id text not null,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -44,6 +54,7 @@ alter table public.profiles enable row level security;
 alter table public.watchlist_items enable row level security;
 alter table public.stock_notes enable row level security;
 alter table public.alerts enable row level security;
+alter table public.telegram_settings enable row level security;
 
 -- Create policies for profiles
 create policy "Users can view own profile" on public.profiles
@@ -94,6 +105,19 @@ create policy "Users can update own alerts" on public.alerts
 create policy "Users can delete own alerts" on public.alerts
   for delete using ((select auth.uid()) = user_id);
 
+-- Create policies for telegram_settings
+create policy "Users can view own telegram settings" on public.telegram_settings
+  for select using ((select auth.uid()) = user_id);
+
+create policy "Users can insert own telegram settings" on public.telegram_settings
+  for insert with check ((select auth.uid()) = user_id);
+
+create policy "Users can update own telegram settings" on public.telegram_settings
+  for update using ((select auth.uid()) = user_id);
+
+create policy "Users can delete own telegram settings" on public.telegram_settings
+  for delete using ((select auth.uid()) = user_id);
+
 -- Create indexes for better performance
 create index idx_watchlist_user_id on public.watchlist_items(user_id);
 create index idx_watchlist_symbol on public.watchlist_items(symbol);
@@ -102,6 +126,7 @@ create index idx_stock_notes_symbol on public.stock_notes(symbol);
 create index idx_alerts_user_id on public.alerts(user_id);
 create index idx_alerts_symbol on public.alerts(symbol);
 create index idx_alerts_active on public.alerts(is_active);
+create index idx_telegram_settings_user_id on public.telegram_settings(user_id);
 
 -- Function to handle profile creation
 create or replace function public.handle_new_user()
@@ -135,4 +160,7 @@ create trigger handle_stock_notes_updated_at before update on public.stock_notes
   for each row execute procedure public.handle_updated_at();
 
 create trigger handle_alerts_updated_at before update on public.alerts
+  for each row execute procedure public.handle_updated_at();
+
+create trigger handle_telegram_settings_updated_at before update on public.telegram_settings
   for each row execute procedure public.handle_updated_at();

@@ -31,8 +31,26 @@ serve(async (req) => {
 
     const url = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(keywords)}&apikey=${apiKey}`
     
+    console.log('Fetching from URL:', url) // Debug log
     const response = await fetch(url)
     const data = await response.json()
+    
+    console.log('Alpha Vantage response:', data) // Debug log
+
+    // Check for Alpha Vantage error responses
+    if (data.Note) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (data['Error Message']) {
+      return new Response(
+        JSON.stringify({ error: data['Error Message'] }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     return new Response(
       JSON.stringify(data),

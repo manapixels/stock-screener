@@ -56,6 +56,7 @@ export default function StockSearch() {
     setLoading(true);
     try {
       const data = await searchStocks(query);
+      console.log('Search API response:', data); // Debug log
       setResults(data.bestMatches || []);
     } catch (error) {
       console.error('Error searching stocks:', error);
