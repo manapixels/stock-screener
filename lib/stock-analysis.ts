@@ -48,8 +48,15 @@ export function analyzeStock(data: StockData, currentPrice: number): AnalysisRes
     bearCase.length
   );
 
-  // Calculate price targets
-  const priceTargets = calculatePriceTargets(overview, currentPrice, recommendation, confidence);
+  // Calculate price targets with enhanced analysis
+  const priceTargets = calculatePriceTargets(
+    overview, 
+    currentPrice, 
+    recommendation, 
+    confidence,
+    data.daily_data?.['Time Series (Daily)'],
+    latestRSI
+  );
 
   return {
     recommendation,
@@ -316,15 +323,102 @@ function generateRecommendation(
   return { recommendation, confidence, reason, targetPrice };
 }
 
+// Sector-specific P/E ratios based on industry averages
+const SECTOR_PE_RATIOS: Record<string, number> = {
+  'Technology': 28,
+  'Software': 32,
+  'Healthcare': 22,
+  'Biotechnology': 25,
+  'Finance': 12,
+  'Banking': 11,
+  'Insurance': 13,
+  'Utilities': 16,
+  'Energy': 14,
+  'Consumer Discretionary': 20,
+  'Consumer Staples': 18,
+  'Industrial': 16,
+  'Materials': 15,
+  'Real Estate': 19,
+  'Telecommunications': 14,
+  'Default': 18
+};
+
+// Calculate volatility from price data
+function calculateVolatility(dailyData: any): number {
+  if (!dailyData || Object.keys(dailyData).length < 20) return 0.15; // Default 15%
+  
+  const prices = Object.values(dailyData)
+    .slice(0, 30) // Last 30 days
+    .map((data: any) => parseFloat(data['4. close']))
+    .filter(price => !isNaN(price));
+  
+  if (prices.length < 10) return 0.15;
+  
+  // Calculate daily returns
+  const returns = [];
+  for (let i = 1; i < prices.length; i++) {
+    const dailyReturn = (prices[i] - prices[i-1]) / prices[i-1];
+    returns.push(dailyReturn);
+  }
+  
+  // Calculate standard deviation (volatility)
+  const mean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
+  const variance = returns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / returns.length;
+  const volatility = Math.sqrt(variance) * Math.sqrt(252); // Annualized
+  
+  return Math.min(Math.max(volatility, 0.08), 0.50); // Cap between 8% and 50%
+}
+
+// Find support and resistance levels from recent price data
+function findSupportResistance(dailyData: any, currentPrice: number): { support: number; resistance: number } {
+  if (!dailyData) return { support: currentPrice * 0.90, resistance: currentPrice * 1.10 };
+  
+  const prices = Object.values(dailyData)
+    .slice(0, 60) // Last 60 days
+    .map((data: any) => parseFloat(data['4. close']))
+    .filter(price => !isNaN(price));
+  
+  if (prices.length < 20) return { support: currentPrice * 0.90, resistance: currentPrice * 1.10 };
+  
+  // Sort prices to find levels
+  const sortedPrices = [...prices].sort((a, b) => a - b);
+  
+  // Support: Recent low but not the absolute minimum
+  const support = sortedPrices[Math.floor(sortedPrices.length * 0.15)]; // 15th percentile
+  
+  // Resistance: Recent high but not the absolute maximum  
+  const resistance = sortedPrices[Math.floor(sortedPrices.length * 0.85)]; // 85th percentile
+  
+  return { 
+    support: Math.max(support, currentPrice * 0.75), // Don't go below 25% of current
+    resistance: Math.min(resistance, currentPrice * 1.35) // Don't go above 35% of current
+  };
+}
+
+// Get sector-specific P/E ratio
+function getSectorPE(overview: any): number {
+  const sector = overview?.Sector || '';
+  const industry = overview?.Industry || '';
+  
+  // Try industry first, then sector, then default
+  return SECTOR_PE_RATIOS[industry] || SECTOR_PE_RATIOS[sector] || SECTOR_PE_RATIOS['Default'];
+}
+
 function calculatePriceTargets(
   overview: any, 
   currentPrice: number, 
   recommendation: 'BUY' | 'HOLD' | 'SELL',
-  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW',
+  dailyData: any = null,
+  rsi: number | null = null
 ): { goodBuyPrice: number; goodSellPrice: number; currentValue: 'undervalued' | 'fairly_valued' | 'overvalued' } {
   
   // Check if we have rate limit or no data (Alpha Vantage returns Information message when rate limited)
   const hasRateLimit = overview?.Information && overview.Information.includes('rate limit');
+  
+  // Calculate volatility and technical levels
+  const volatility = calculateVolatility(dailyData);
+  const { support, resistance } = findSupportResistance(dailyData, currentPrice);
   
   let fairValue: number;
   
@@ -337,23 +431,44 @@ function calculatePriceTargets(
     const pe = parseFloat(overview?.PERatio);
     const eps = parseFloat(overview?.EPS);
     const bookValue = parseFloat(overview?.BookValue);
+    const pegRatio = parseFloat(overview?.PEGRatio);
     
     // Only use fundamental analysis if we have valid data
     if (pe && eps && pe > 0 && eps > 0) {
-      // DCF-inspired fair value (simplified using P/E and growth assumptions)
-      const industryAvgPE = 18; // Conservative industry average
-      const conservativePE = Math.min(pe * 0.9, industryAvgPE); // 10% discount or industry avg
-      const fairValueFromEarnings = eps * conservativePE;
+      // Use sector-specific P/E instead of fixed 18
+      const sectorPE = getSectorPE(overview);
       
-      // Book value approach
-      const fairValueFromBook = bookValue && bookValue > 0 ? bookValue * 1.5 : currentPrice;
+      // Adjust sector P/E based on company's current P/E relative to sector
+      const peDiscount = pe > sectorPE ? 0.9 : 1.0; // 10% discount if overvalued vs sector
+      const targetPE = Math.min(pe * peDiscount, sectorPE);
       
-      // Average the approaches, weight earnings method more heavily
-      fairValue = (fairValueFromEarnings * 0.7 + fairValueFromBook * 0.3);
+      // Fair value from earnings with growth consideration
+      let fairValueFromEarnings = eps * targetPE;
+      
+      // Adjust for growth if PEG ratio is available
+      if (pegRatio && pegRatio > 0 && pegRatio < 3) {
+        const growthAdjustment = pegRatio < 1 ? 1.1 : pegRatio > 2 ? 0.9 : 1.0;
+        fairValueFromEarnings *= growthAdjustment;
+      }
+      
+      // Book value approach (more conservative for financial vs growth companies)
+      const isFinancial = overview?.Sector?.toLowerCase().includes('financial') || 
+                         overview?.Industry?.toLowerCase().includes('bank');
+      const bookMultiplier = isFinancial ? 1.2 : 1.8; // Lower multiple for banks
+      const fairValueFromBook = bookValue && bookValue > 0 ? bookValue * bookMultiplier : currentPrice;
+      
+      // Weight based on sector (growth vs value)
+      const isGrowthSector = ['Technology', 'Software', 'Biotechnology'].includes(overview?.Industry || overview?.Sector);
+      const earningsWeight = isGrowthSector ? 0.8 : 0.6;
+      const bookWeight = 1 - earningsWeight;
+      
+      // Average the approaches
+      fairValue = (fairValueFromEarnings * earningsWeight + fairValueFromBook * bookWeight);
       
       // Sanity check - if calculated fair value is too far from current price, use current price as base
-      if (fairValue < currentPrice * 0.3 || fairValue > currentPrice * 3) {
+      if (fairValue < currentPrice * 0.4 || fairValue > currentPrice * 2.5) {
         fairValue = currentPrice;
+        console.log('Fair value calculation outside reasonable range, using current price');
       }
     } else {
       // Use current price as fair value when fundamental data is unavailable
@@ -361,28 +476,74 @@ function calculatePriceTargets(
     }
   }
   
-  // Calculate good buy price (15% below fair value)
-  const goodBuyPrice = fairValue * 0.85;
+  // Calculate volatility-adjusted margins
+  const baseDiscountRate = Math.max(0.10, Math.min(volatility * 0.6, 0.30)); // 10-30% range
+  const basePremiumRate = Math.max(0.15, Math.min(volatility * 0.8, 0.40)); // 15-40% range
   
-  // Calculate good sell price (20% above fair value)
-  const goodSellPrice = fairValue * 1.20;
+  // RSI adjustments - avoid buying overbought, selling oversold
+  let rsiAdjustment = 1.0;
+  if (rsi) {
+    if (rsi > 70) {
+      // Overbought - increase buy discount, decrease sell premium
+      rsiAdjustment = 1.15;
+    } else if (rsi < 30) {
+      // Oversold - decrease buy discount, increase sell premium  
+      rsiAdjustment = 0.85;
+    }
+  }
   
-  // Adjust prices based on confidence
-  const confidenceMultiplier = confidence === 'HIGH' ? 1.05 : confidence === 'LOW' ? 0.95 : 1.0;
+  // Calculate initial targets based on fair value
+  const fundamentalBuyPrice = fairValue * (1 - baseDiscountRate * rsiAdjustment);
+  const fundamentalSellPrice = fairValue * (1 + basePremiumRate / rsiAdjustment);
+  
+  // Integrate with technical levels
+  const goodBuyPrice = Math.max(fundamentalBuyPrice, support * 1.02); // Stay slightly above support
+  const goodSellPrice = Math.min(fundamentalSellPrice, resistance * 0.98); // Stay slightly below resistance
+  
+  // Market condition adjustments (simplified VIX proxy using volatility)
+  const isHighVolatility = volatility > 0.25;
+  const marketMultiplier = isHighVolatility ? 
+    { buy: 0.95, sell: 1.05 } : // More aggressive in volatile markets
+    { buy: 1.0, sell: 1.0 };
+  
+  // Confidence adjustments
+  const confidenceMultiplier = {
+    'HIGH': { buy: 0.98, sell: 1.02 }, // More aggressive when confident
+    'MEDIUM': { buy: 1.0, sell: 1.0 },
+    'LOW': { buy: 1.02, sell: 0.98 }   // More conservative when uncertain
+  }[confidence];
+  
+  // Final price calculations
+  const finalBuyPrice = goodBuyPrice * marketMultiplier.buy * confidenceMultiplier.buy;
+  const finalSellPrice = goodSellPrice * marketMultiplier.sell * confidenceMultiplier.sell;
+  
+  // Ensure buy price is below current and sell price is above current
+  const adjustedBuyPrice = Math.min(finalBuyPrice, currentPrice * 0.95);
+  const adjustedSellPrice = Math.max(finalSellPrice, currentPrice * 1.05);
   
   // Determine current valuation
   let currentValue: 'undervalued' | 'fairly_valued' | 'overvalued';
-  if (currentPrice < goodBuyPrice * 1.05) { // 5% buffer around good buy price
+  if (currentPrice <= adjustedBuyPrice * 1.03) { // 3% buffer
     currentValue = 'undervalued';
-  } else if (currentPrice > goodSellPrice * 0.95) { // 5% buffer around good sell price
+  } else if (currentPrice >= adjustedSellPrice * 0.97) { // 3% buffer
     currentValue = 'overvalued';
   } else {
     currentValue = 'fairly_valued';
   }
   
+  console.log('Enhanced price targets:', {
+    fairValue: fairValue.toFixed(2),
+    volatility: (volatility * 100).toFixed(1) + '%',
+    support: support.toFixed(2),
+    resistance: resistance.toFixed(2),
+    rsi,
+    buyDiscount: (baseDiscountRate * 100).toFixed(1) + '%',
+    sellPremium: (basePremiumRate * 100).toFixed(1) + '%'
+  });
+  
   return {
-    goodBuyPrice: Math.round(goodBuyPrice * confidenceMultiplier * 100) / 100,
-    goodSellPrice: Math.round(goodSellPrice * confidenceMultiplier * 100) / 100,
+    goodBuyPrice: Math.round(adjustedBuyPrice * 100) / 100,
+    goodSellPrice: Math.round(adjustedSellPrice * 100) / 100,
     currentValue
   };
 }

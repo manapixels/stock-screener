@@ -128,15 +128,6 @@ npm run supabase:deploy       # Deploy to production
 ## 🚀 Future Roadmap
 
 ### Phase 1: Enhanced Analysis (Next 2-4 weeks)
-#### Portfolio Analytics
-- [ ] Portfolio overview with total value and performance
-- [ ] Diversification analysis across sectors
-- [ ] Risk assessment dashboard
-
-#### Advanced Charting
-- [ ] Candlestick charts with volume indicators
-- [ ] Technical overlay indicators (moving averages, Bollinger Bands)
-- [ ] Comparison charts between multiple stocks
 
 #### Smart Insights
 - [ ] AI-powered news sentiment analysis
@@ -224,5 +215,4 @@ npm run supabase:deploy       # Deploy to production
 
 ---
 
-*Last Updated: December 2024*
 *Project Status: Active Development - Core MVP Complete*
