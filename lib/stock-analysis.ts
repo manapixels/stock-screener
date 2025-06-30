@@ -182,12 +182,17 @@ function generateBearCase(overview: any, rsi: number | null, newsSentiment: any)
   const pe = parseFloat(overview?.PERatio);
   if (!isNaN(pe) && pe > 30) {
     bearPoints.push({
-      text: `High valuation with P/E ratio of ${pe.toFixed(1)}x may limit upside potential`,
+      text: `High valuation with P/E ratio of ${pe.toFixed(1)}x may limit upside potential and increase downside risk during market corrections`,
       strength: 'moderate' as const
     });
   } else if (!isNaN(pe) && pe > 25) {
     bearPoints.push({
-      text: `Elevated P/E ratio of ${pe.toFixed(1)}x suggests premium pricing`,
+      text: `Elevated P/E ratio of ${pe.toFixed(1)}x suggests premium pricing that may not be sustainable`,
+      strength: 'weak' as const
+    });
+  } else if (!isNaN(pe) && pe > 20) {
+    bearPoints.push({
+      text: `Above-average P/E ratio of ${pe.toFixed(1)}x indicates market has high expectations that may be difficult to meet`,
       strength: 'weak' as const
     });
   }
@@ -196,38 +201,117 @@ function generateBearCase(overview: any, rsi: number | null, newsSentiment: any)
   const de = parseFloat(overview?.DebtToEquityRatio);
   if (!isNaN(de) && de > 1.0) {
     bearPoints.push({
-      text: `High debt burden with debt-to-equity ratio of ${de.toFixed(2)} may constrain financial flexibility`,
+      text: `High debt burden with debt-to-equity ratio of ${de.toFixed(2)} may constrain financial flexibility and increase bankruptcy risk`,
       strength: 'strong' as const
     });
   } else if (!isNaN(de) && de > 0.6) {
     bearPoints.push({
-      text: `Elevated debt levels with D/E ratio of ${de.toFixed(2)}`,
+      text: `Elevated debt levels with D/E ratio of ${de.toFixed(2)} could limit growth investments and increase interest rate sensitivity`,
       strength: 'moderate' as const
+    });
+  } else if (!isNaN(de) && de > 0.4) {
+    bearPoints.push({
+      text: `Moderate debt levels with D/E ratio of ${de.toFixed(2)} may pressure cash flows during economic downturns`,
+      strength: 'weak' as const
     });
   }
   
   // Technical Overbought
   if (rsi && rsi > 70) {
     bearPoints.push({
-      text: `Overbought condition with RSI at ${rsi.toFixed(1)} suggests potential pullback`,
+      text: `Overbought condition with RSI at ${rsi.toFixed(1)} suggests potential pullback as momentum traders take profits`,
+      strength: 'moderate' as const
+    });
+  } else if (rsi && rsi > 60) {
+    bearPoints.push({
+      text: `Elevated RSI at ${rsi.toFixed(1)} indicates reduced upside momentum in the near term`,
+      strength: 'weak' as const
+    });
+  }
+  
+  // ROE Analysis
+  const roe = parseFloat(overview?.ReturnOnEquityTTM);
+  if (!isNaN(roe) && roe < 0.05) {
+    bearPoints.push({
+      text: `Weak profitability with ROE of only ${(roe * 100).toFixed(1)}% indicates poor capital allocation efficiency`,
+      strength: 'strong' as const
+    });
+  } else if (!isNaN(roe) && roe < 0.10) {
+    bearPoints.push({
+      text: `Below-average ROE of ${(roe * 100).toFixed(1)}% suggests limited ability to generate shareholder value`,
+      strength: 'moderate' as const
+    });
+  } else if (!isNaN(roe) && roe < 0.15) {
+    bearPoints.push({
+      text: `Moderate ROE of ${(roe * 100).toFixed(1)}% indicates room for improvement in operational efficiency`,
+      strength: 'weak' as const
+    });
+  }
+  
+  // Price-to-Book Analysis
+  const pb = parseFloat(overview?.PriceToBookRatio);
+  if (!isNaN(pb) && pb > 5.0) {
+    bearPoints.push({
+      text: `Very high price-to-book ratio of ${pb.toFixed(1)}x suggests significant overvaluation relative to tangible assets`,
+      strength: 'moderate' as const
+    });
+  } else if (!isNaN(pb) && pb > 3.0) {
+    bearPoints.push({
+      text: `Elevated price-to-book ratio of ${pb.toFixed(1)}x indicates premium valuation that may be vulnerable to market corrections`,
+      strength: 'weak' as const
+    });
+  }
+  
+  // Sector-Specific Risks
+  const sector = overview?.Sector || 'Unknown';
+  if (sector === 'Technology') {
+    bearPoints.push({
+      text: `Technology sector exposure creates vulnerability to interest rate changes, regulatory scrutiny, and rapid innovation cycles`,
+      strength: 'weak' as const
+    });
+  } else if (sector === 'Energy') {
+    bearPoints.push({
+      text: `Energy sector volatility and transition to renewable sources create long-term headwinds`,
+      strength: 'moderate' as const
+    });
+  } else if (sector === 'Real Estate') {
+    bearPoints.push({
+      text: `Real estate sector sensitivity to interest rates and economic cycles poses cyclical risks`,
       strength: 'moderate' as const
     });
   }
   
-  // Low ROE
-  const roe = parseFloat(overview?.ReturnOnEquityTTM);
-  if (!isNaN(roe) && roe < 0.05) {
+  // Market Cap Risk
+  const marketCap = parseFloat(overview?.MarketCapitalization || '0');
+  if (marketCap < 2000000000) { // Under $2B
     bearPoints.push({
-      text: `Weak profitability with ROE of only ${(roe * 100).toFixed(1)}%`,
-      strength: 'strong' as const
+      text: `Small-cap stock may experience higher volatility and limited liquidity during market stress`,
+      strength: 'moderate' as const
+    });
+  } else if (marketCap < 10000000000) { // Under $10B
+    bearPoints.push({
+      text: `Mid-cap stock may face growth challenges and increased competition from larger players`,
+      strength: 'weak' as const
     });
   }
   
   // Negative news sentiment
   if (newsSentiment?.overall_sentiment_score && parseFloat(newsSentiment.overall_sentiment_score) < -0.2) {
     bearPoints.push({
-      text: `Recent negative news sentiment may pressure stock performance`,
+      text: `Recent negative news sentiment may pressure stock performance and investor confidence`,
       strength: 'moderate' as const
+    });
+  }
+  
+  // General Market Risks (always include at least one risk factor)
+  if (bearPoints.length === 0) {
+    bearPoints.push({
+      text: `Market volatility and macroeconomic uncertainties could impact stock performance regardless of company fundamentals`,
+      strength: 'weak' as const
+    });
+    bearPoints.push({
+      text: `Rising interest rates environment may reduce valuations for growth-oriented investments`,
+      strength: 'weak' as const
     });
   }
   

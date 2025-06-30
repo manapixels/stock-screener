@@ -121,6 +121,31 @@ export const getStockNewsAndSentiment = async (symbol: string) => {
   }
 }
 
+// Get professional investment analysis using Gemini 2.5 Flash
+export const getProfessionalAnalysis = async (symbol: string) => {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/professional-analysis`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ symbol }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('Error fetching professional analysis:', error)
+    throw error
+  }
+}
+
 // Watchlist functions
 export const addWatchlistItem = async (symbol: string, companyName: string) => {
   const authResult = await getAuthenticatedUser()

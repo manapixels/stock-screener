@@ -12,6 +12,7 @@ import { RecommendationBadge } from '@/components/ui/recommendation-badge';
 import { BullCase } from '@/components/ui/bull-case';
 import { BearCase } from '@/components/ui/bear-case';
 import { InvestmentVerdict } from '@/components/ui/investment-verdict';
+import { ProfessionalAnalysis } from '@/components/ui/professional-analysis';
 import { toast } from 'sonner';
 
 // Note: Using any for external API data with complex/unknown structure
@@ -371,17 +372,14 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
         </div>
       </div>
 
-      {/* Investment Analysis - Bull & Bear Cases */}
+      {/* Professional Investment Analysis */}
       <div>
         <div className="flex items-center gap-2 mb-6">
           <TrendingUp className="h-5 w-5 text-gray-700" />
           <h2 className="text-2xl font-semibold text-gray-900">Investment Analysis</h2>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <BullCase bullPoints={analysis.bullCase} />
-          <BearCase bearPoints={analysis.bearCase} />
-        </div>
+        <ProfessionalAnalysis symbol={symbol} />
       </div>
 
 
