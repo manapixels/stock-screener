@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Search, TrendingUp } from 'lucide-react'
+import { X, Search, TrendingUp, Globe } from 'lucide-react'
 import { searchStocks, addWatchlistItem, isAuthError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +20,55 @@ interface StockResult {
   matchScore: string
 }
 
+// Function to determine correct market info from symbol
+function getMarketInfoFromSymbol(symbol: string): { region: string; currency: string } {
+  // Map suffixes to correct market info
+  const marketMap: Record<string, { region: string; currency: string }> = {
+    '.SI': { region: 'Singapore', currency: 'SGD' },
+    '.L': { region: 'United Kingdom', currency: 'GBP' },
+    '.T': { region: 'Japan', currency: 'JPY' },
+    '.HK': { region: 'Hong Kong', currency: 'HKD' },
+    '.TO': { region: 'Canada', currency: 'CAD' },
+    '.AX': { region: 'Australia', currency: 'AUD' },
+    '.F': { region: 'Germany', currency: 'EUR' },
+    '.PA': { region: 'France', currency: 'EUR' },
+    '.BO': { region: 'India', currency: 'INR' },
+    '.SZ': { region: 'China', currency: 'CNY' },
+    '.KS': { region: 'South Korea', currency: 'KRW' }
+  }
+  
+  // Check for suffix in symbol
+  for (const [suffix, info] of Object.entries(marketMap)) {
+    if (symbol.includes(suffix)) {
+      return info
+    }
+  }
+  
+  // Default to US if no suffix found
+  return { region: 'United States', currency: 'USD' }
+}
+
+interface Market {
+  code: string
+  name: string
+  country: string
+  flag: string
+  suffix: string
+  timezone: string
+  currency: string
+}
+
+const MARKETS: Market[] = [
+  { code: 'ALL', name: 'All Markets', country: 'Global', flag: '🌍', suffix: '', timezone: 'Global', currency: 'Various' },
+  { code: 'US', name: 'US Exchanges', country: 'United States', flag: '🇺🇸', suffix: '', timezone: 'EST', currency: 'USD' },
+  { code: 'SGX', name: 'Singapore', country: 'Singapore', flag: '🇸🇬', suffix: '.SI', timezone: 'SGT', currency: 'SGD' },
+  { code: 'LSE', name: 'London', country: 'United Kingdom', flag: '🇬🇧', suffix: '.L', timezone: 'GMT', currency: 'GBP' },
+  { code: 'TSE', name: 'Tokyo', country: 'Japan', flag: '🇯🇵', suffix: '.T', timezone: 'JST', currency: 'JPY' },
+  { code: 'HKG', name: 'Hong Kong', country: 'Hong Kong', flag: '🇭🇰', suffix: '.HK', timezone: 'HKT', currency: 'HKD' },
+  { code: 'TSX', name: 'Toronto', country: 'Canada', flag: '🇨🇦', suffix: '.TO', timezone: 'EST', currency: 'CAD' },
+  { code: 'ASX', name: 'Australia', country: 'Australia', flag: '🇦🇺', suffix: '.AX', timezone: 'AEST', currency: 'AUD' }
+]
+
 interface SearchModalProps {
   isOpen: boolean
   onClose: () => void
@@ -30,8 +79,11 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<StockResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [selectedMarket, setSelectedMarket] = useState<Market>(MARKETS[0]) // Default to All Markets
+  const [showMarketDropdown, setShowMarketDropdown] = useState(false)
   const { user } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
+  const marketRef = useRef<HTMLDivElement>(null)
 
   // Focus input when modal opens
   useEffect(() => {
@@ -45,10 +97,23 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
     if (!isOpen) {
       setQuery('')
       setResults([])
+      setShowMarketDropdown(false)
     }
   }, [isOpen])
 
-  // Handle search with debouncing
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (marketRef.current && !marketRef.current.contains(event.target as Node)) {
+        setShowMarketDropdown(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Handle search with debouncing (re-search when market changes)
   useEffect(() => {
     if (!query.trim()) {
       setResults([])
@@ -60,15 +125,37 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
     }, 300) // Debounce 300ms
 
     return () => clearTimeout(timeoutId)
-  }, [query])
+  }, [query, selectedMarket])
 
   const handleSearch = async () => {
     if (!query.trim()) return
 
     setLoading(true)
     try {
+      // Search by name/symbol without adding suffixes - let the API handle it
       const data = await searchStocks(query)
-      setResults(data.bestMatches || [])
+      let filteredResults = data.bestMatches || []
+      
+      // Filter results by selected market if not "All Markets"
+      if (selectedMarket.code !== 'ALL') {
+        if (selectedMarket.code === 'US') {
+          // For US, show stocks without suffixes or with US-specific patterns
+          filteredResults = filteredResults.filter((stock: StockResult) => 
+            !stock.symbol.includes('.') || 
+            stock.region.toLowerCase().includes('united states') ||
+            stock.region.toLowerCase().includes('nasdaq') ||
+            stock.region.toLowerCase().includes('nyse')
+          )
+        } else {
+          // For other markets, filter by suffix or region
+          filteredResults = filteredResults.filter((stock: StockResult) => 
+            stock.symbol.includes(selectedMarket.suffix) || 
+            stock.region.toLowerCase().includes(selectedMarket.country.toLowerCase())
+          )
+        }
+      }
+      
+      setResults(filteredResults)
     } catch (error) {
       console.error('Error searching stocks:', error)
       toast.error('Failed to search stocks')
@@ -141,16 +228,59 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
 
           {/* Search Input */}
           <div className="p-4 sm:p-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search for stocks (e.g., AAPL, Microsoft, Tesla)"
-                className="pl-10 text-base sm:text-sm"
-              />
+            {/* Search Input with Market Filter */}
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  ref={inputRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search stocks by name or symbol (e.g., Apple, AAPL, Microsoft)"
+                  className="pl-10 pr-4 text-base sm:text-sm"
+                />
+              </div>
+
+              {/* Compact Market Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 font-medium">Market:</span>
+                <div className="relative" ref={marketRef}>
+                  <button
+                    onClick={() => setShowMarketDropdown(!showMarketDropdown)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <span className="text-sm">{selectedMarket.flag}</span>
+                    <span>{selectedMarket.name}</span>
+                    <svg className={`h-3 w-3 text-gray-500 transition-transform ${showMarketDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showMarketDropdown && (
+                    <div className="absolute z-10 left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg min-w-48">
+                      {MARKETS.map((market) => (
+                        <button
+                          key={market.code}
+                          onClick={() => {
+                            setSelectedMarket(market)
+                            setShowMarketDropdown(false)
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                            selectedMarket.code === market.code ? 'bg-blue-50 text-blue-700' : ''
+                          }`}
+                        >
+                          <span className="text-sm">{market.flag}</span>
+                          <span className="font-medium">{market.name}</span>
+                          {selectedMarket.code === market.code && (
+                            <div className="ml-auto w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Loading State */}
@@ -164,26 +294,32 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
             {!loading && results.length > 0 && (
               <div className="mt-4 max-h-96 overflow-y-auto">
                 <div className="space-y-2">
-                  {results.map((stock) => (
-                    <div 
-                      key={stock.symbol} 
-                      className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-blue-600 text-lg">
-                              {stock.symbol}
-                            </span>
-                            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                              {stock.type}
-                            </span>
+                  {results.map((stock) => {
+                    // Get corrected market info based on symbol
+                    const correctedMarketInfo = getMarketInfoFromSymbol(stock.symbol)
+                    const displayRegion = correctedMarketInfo.region
+                    const displayCurrency = correctedMarketInfo.currency
+                    
+                    return (
+                      <div 
+                        key={stock.symbol} 
+                        className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-semibold text-blue-600 text-lg">
+                                {stock.symbol}
+                              </span>
+                              <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
+                                {stock.type}
+                              </span>
+                            </div>
+                            <p className="text-gray-800 font-medium mb-1">{stock.name}</p>
+                            <p className="text-sm text-gray-500">
+                              {displayRegion} • {displayCurrency}
+                            </p>
                           </div>
-                          <p className="text-gray-800 font-medium mb-1">{stock.name}</p>
-                          <p className="text-sm text-gray-500">
-                            {stock.region} • {stock.currency}
-                          </p>
-                        </div>
                         
                         <div className="flex flex-col sm:flex-row gap-2">
                           <Button
@@ -193,7 +329,7 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
                             className="flex items-center gap-1"
                           >
                             <TrendingUp className="h-4 w-4" />
-                            View Analysis
+                            Open
                           </Button>
                           {user && (
                             <Button
@@ -206,7 +342,8 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
                         </div>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
