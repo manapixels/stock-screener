@@ -413,8 +413,8 @@ function calculatePriceTargets(
   rsi: number | null = null
 ): { goodBuyPrice: number; goodSellPrice: number; currentValue: 'undervalued' | 'fairly_valued' | 'overvalued' } {
   
-  // Check if we have rate limit or no data (Alpha Vantage returns Information message when rate limited)
-  const hasRateLimit = overview?.Information && overview.Information.includes('rate limit');
+  // Check if we have valid data
+  const hasValidData = overview && Object.keys(overview).length > 0;
   
   // Calculate volatility and technical levels
   const volatility = calculateVolatility(dailyData);
@@ -422,10 +422,10 @@ function calculatePriceTargets(
   
   let fairValue: number;
   
-  if (hasRateLimit || !overview || Object.keys(overview).length === 0) {
-    // When rate limited or no data, use current price with reasonable assumptions
+  if (!hasValidData) {
+    // When no fundamental data available, use current price as fair value
     fairValue = currentPrice;
-    console.log('Using current price as fair value due to rate limit or missing data');
+    console.log('Using current price as fair value due to missing fundamental data');
   } else {
     // Try to get fundamental data
     const pe = parseFloat(overview?.PERatio);

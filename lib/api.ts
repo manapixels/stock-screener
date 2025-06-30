@@ -18,10 +18,10 @@ async function getAuthenticatedUser() {
   return { user }
 }
 
-// Stock search function - Primary: Yahoo Finance, Backup: Alpha Vantage
+// Stock search function using Yahoo Finance
 export const searchStocks = async (query: string) => {
   try {
-    // Try Yahoo Finance first
+    // Get data from Yahoo Finance
     const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-search`, {
       method: 'POST',
       headers: {
@@ -44,10 +44,10 @@ export const searchStocks = async (query: string) => {
   }
 }
 
-// Get stock details function - Primary: Yahoo Finance, Backup: Alpha Vantage
+// Get stock details function using Yahoo Finance
 export const getStockDetails = async (symbol: string) => {
   try {
-    // Try simplified Yahoo Finance endpoint first
+    // Get comprehensive stock data from Yahoo Finance
     const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/simple-stock-data`, {
       method: 'POST',
       headers: {
@@ -70,10 +70,10 @@ export const getStockDetails = async (symbol: string) => {
   }
 }
 
-// Get current stock price and price changes - Primary: Yahoo Finance, Backup: Alpha Vantage
+// Get current stock price and price changes using Yahoo Finance
 export const getStockPrice = async (symbol: string) => {
   try {
-    // Try Yahoo Finance first
+    // Get data from Yahoo Finance
     const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-price`, {
       method: 'POST',
       headers: {

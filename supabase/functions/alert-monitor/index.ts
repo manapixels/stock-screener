@@ -100,79 +100,56 @@ serve(async (req: Request) => {
 })
 
 async function getStockData(symbol: string) {
-  const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY')
-  if (!apiKey) {
-    throw new Error('Alpha Vantage API key not configured')
-  }
-
   try {
-    // Fetch multiple data sources in parallel
-    const [overview, daily, rsi, bbands] = await Promise.all([
-      fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${symbol}&apikey=${apiKey}`),
-      fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${apiKey}`),
-      fetch(`https://www.alphavantage.co/query?function=RSI&symbol=${symbol}&interval=daily&time_period=14&series_type=close&apikey=${apiKey}`),
-      fetch(`https://www.alphavantage.co/query?function=BBANDS&symbol=${symbol}&interval=daily&time_period=20&series_type=close&apikey=${apiKey}`)
-    ])
+    // Use Yahoo Finance for price data
+    const yahooHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+    
+    const response = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1mo`, 
+      { headers: yahooHeaders }
+    )
 
-    const [overviewData, dailyData, rsiData, bbandsData] = await Promise.all([
-      overview.json(),
-      daily.json(),
-      rsi.json(),
-      bbands.json()
-    ])
+    if (!response.ok) {
+      throw new Error('Failed to fetch from Yahoo Finance')
+    }
 
-    // Extract current price from daily data
-    let currentPrice = null
+    const data = await response.json()
+    const result = data.chart?.result?.[0]
+    
+    if (!result) {
+      throw new Error('No data found for symbol')
+    }
+
+    const meta = result.meta
+    const timestamps = result.timestamp || []
+    const quotes = result.indicators?.quote?.[0] || {}
+    const closes = quotes.close || []
+    
+    // Extract current price from latest data
+    let currentPrice = closes[closes.length - 1] || meta?.regularMarketPrice || null
     const movingAverages: { [key: string]: number } = {}
     
-    if (dailyData['Time Series (Daily)']) {
-      const timeSeries = dailyData['Time Series (Daily)']
-      const dates = Object.keys(timeSeries).sort((a, b) => b.localeCompare(a))
-      
-      if (dates.length > 0) {
-        currentPrice = parseFloat(timeSeries[dates[0]]['4. close'])
-        
-        // Calculate moving averages
-        if (dates.length >= 50) {
-          const ma50 = dates.slice(0, 50).reduce((sum, date) => 
-            sum + parseFloat(timeSeries[date]['4. close']), 0) / 50
-          movingAverages.ma_50 = ma50
-        }
-        
-        if (dates.length >= 200) {
-          const ma200 = dates.slice(0, 200).reduce((sum, date) => 
-            sum + parseFloat(timeSeries[date]['4. close']), 0) / 200
-          movingAverages.ma_200 = ma200
-        }
-      }
+    // Calculate simple moving averages from closes array
+    if (closes.length >= 50) {
+      const ma50 = closes.slice(-50).reduce((sum, price) => sum + price, 0) / 50
+      movingAverages.ma_50 = ma50
+    }
+    
+    if (closes.length >= 200) {
+      const ma200 = closes.slice(-200).reduce((sum, price) => sum + price, 0) / 200
+      movingAverages.ma_200 = ma200
     }
 
-    // Extract current RSI
-    let currentRsi = null
-    if (rsiData['Technical Analysis: RSI']) {
-      const rsiValues = rsiData['Technical Analysis: RSI']
-      const latestDate = Object.keys(rsiValues).sort((a, b) => b.localeCompare(a))[0]
-      if (latestDate) {
-        currentRsi = parseFloat(rsiValues[latestDate]['RSI'])
-      }
-    }
-
-    // Extract Bollinger Bands
+    // For now, set technical indicators to null as Yahoo Finance doesn't provide RSI/Bollinger directly
+    const currentRsi = null
     const bollingerBands: { [key: string]: number } = {}
-    if (bbandsData['Technical Analysis: BBANDS']) {
-      const bbandsValues = bbandsData['Technical Analysis: BBANDS']
-      const latestDate = Object.keys(bbandsValues).sort((a, b) => b.localeCompare(a))[0]
-      if (latestDate) {
-        bollingerBands.upper = parseFloat(bbandsValues[latestDate]['Real Upper Band'])
-        bollingerBands.middle = parseFloat(bbandsValues[latestDate]['Real Middle Band'])
-        bollingerBands.lower = parseFloat(bbandsValues[latestDate]['Real Lower Band'])
-      }
-    }
-
-    // Extract P/E ratio
+    
+    // Basic P/E ratio from meta data
     let peRatio = null
-    if (overviewData.PERatio && overviewData.PERatio !== 'None') {
-      peRatio = parseFloat(overviewData.PERatio)
+    if (meta?.trailingPE) {
+      peRatio = meta.trailingPE
     }
 
     return {
@@ -182,7 +159,7 @@ async function getStockData(symbol: string) {
       rsi: currentRsi,
       moving_averages: movingAverages,
       bollinger_bands: bollingerBands,
-      overview: overviewData
+      overview: { symbol: symbol.toUpperCase() }
     }
   } catch (error) {
     console.error(`Error fetching stock data for ${symbol}:`, error)

@@ -39,7 +39,7 @@ serve(async (req) => {
 
       const data = await response.json()
       
-      // Transform Yahoo data to match Alpha Vantage format
+      // Transform Yahoo data to standard format
       const bestMatches = data.quotes?.map((quote: any) => ({
         symbol: quote.symbol,
         name: quote.longname || quote.shortname || quote.symbol,
@@ -67,57 +67,10 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     } catch (yahooError) {
-      console.log('Yahoo Finance failed, falling back to Alpha Vantage...')
-      
-      // Fall back to Alpha Vantage
-      const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY')
-      if (!apiKey) {
-        return new Response(
-          JSON.stringify({ error: 'No search results available and Alpha Vantage API key not configured' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      const alphaUrl = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(keywords)}&apikey=${apiKey}`
-      const alphaResponse = await fetch(alphaUrl)
-      const alphaData = await alphaResponse.json()
-
-      // Check for Alpha Vantage rate limit
-      if (alphaData.Note) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      if (alphaData['Error Message']) {
-        return new Response(
-          JSON.stringify({ error: alphaData['Error Message'] }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
-      // Transform Alpha Vantage data
-      const transformedData = {
-        ...alphaData,
-        bestMatches: alphaData.bestMatches?.map((match: any) => ({
-          symbol: match['1. symbol'],
-          name: match['2. name'],
-          type: match['3. type'],
-          region: match['4. region'],
-          marketOpen: match['5. marketOpen'],
-          marketClose: match['6. marketClose'],
-          timezone: match['7. timezone'],
-          currency: match['8. currency'],
-          matchScore: match['9. matchScore'],
-        })) || []
-      }
-
-      console.log(`Fallback: Found ${transformedData.bestMatches.length} matches from Alpha Vantage`)
-
+      console.error('Yahoo Finance search failed:', yahooError)
       return new Response(
-        JSON.stringify(transformedData),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Search failed - no results available' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
   } catch (error) {

@@ -30,20 +30,8 @@ serve(async (req) => {
     const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1mo`, { headers: yahooHeaders })
     
     if (!response.ok) {
-      // Fall back to Alpha Vantage
-      console.log('Yahoo Finance failed, falling back to Alpha Vantage...')
-      const apiKey = Deno.env.get('ALPHA_VANTAGE_API_KEY')
-      if (apiKey) {
-        const alphaResponse = await fetch(`https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${apiKey}`)
-        const alphaData = await alphaResponse.json()
-        
-        if (alphaData['Time Series (Daily)']) {
-          return Response.redirect(`${new URL(req.url).origin}/functions/v1/stock-price`, 307)
-        }
-      }
-      
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch price data from both Yahoo Finance and Alpha Vantage' }),
+        JSON.stringify({ error: 'Failed to fetch price data from Yahoo Finance' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
