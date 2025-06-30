@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Building2, TrendingUp, DollarSign, BarChart3, MessageSquare, PenTool } from 'lucide-react';
-import { getStockDetails, getStockNote, saveStockNote } from '@/lib/api';
+import { Building2, TrendingUp, DollarSign, BarChart3, MessageSquare, PenTool, ExternalLink, Clock } from 'lucide-react';
+import { getStockDetails, getStockNote, saveStockNote, getStockNewsAndSentiment } from '@/lib/api';
 import { analyzeStock, formatNumber } from '@/lib/stock-analysis';
 import { getCurrencyFromSymbol, formatCurrencyByContext, formatPriceChange } from '@/lib/currency-utils';
 import { MetricCard } from '@/components/ui/metric-card';
@@ -16,6 +16,21 @@ import { toast } from 'sonner';
 
 // Note: Using any for external API data with complex/unknown structure
 /* eslint-disable @typescript-eslint/no-explicit-any */
+interface NewsItem {
+  title: string
+  link: string
+  providerPublishTime: number
+  type: string
+  uuid: string
+}
+
+interface SentimentAnalysis {
+  overall: 'bullish' | 'bearish' | 'neutral'
+  score: number
+  confidence: number
+  reasoning: string
+}
+
 interface StockDetails {
   overview: any;
   earnings: any;
@@ -23,11 +38,36 @@ interface StockDetails {
   rsi: any;
   bbands: any;
   news_sentiment: any;
+  currentPrice?: number;
 }
 
 interface StockDetailClientProps {
   symbol: string;
   onPriceUpdate?: (price: number) => void;
+}
+
+const sentimentConfig = {
+  bullish: { 
+    label: 'Bullish', 
+    color: 'text-green-600', 
+    bgColor: 'bg-green-50', 
+    borderColor: 'border-green-200',
+    icon: '🐂'
+  },
+  bearish: { 
+    label: 'Bearish', 
+    color: 'text-red-600', 
+    bgColor: 'bg-red-50', 
+    borderColor: 'border-red-200',
+    icon: '🐻'
+  },
+  neutral: { 
+    label: 'Neutral', 
+    color: 'text-gray-600', 
+    bgColor: 'bg-gray-50', 
+    borderColor: 'border-gray-200',
+    icon: '⚪'
+  }
 }
 
 export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetailClientProps) {
@@ -36,6 +76,8 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
   const [error, setError] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>('');
   const [chartPeriod, setChartPeriod] = useState<'1W' | '1M' | '1Y'>('1M');
+  const [newsData, setNewsData] = useState<{ news: NewsItem[], sentiment: SentimentAnalysis } | null>(null);
+  const [newsLoading, setNewsLoading] = useState(false);
 
   useEffect(() => {
     if (!symbol) return;
@@ -50,6 +92,17 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
         const note = await getStockNote(symbol);
         if (note && note.note) {
           setNoteContent(note.note);
+        }
+
+        // Fetch news and sentiment in parallel
+        setNewsLoading(true);
+        try {
+          const newsAndSentiment = await getStockNewsAndSentiment(symbol);
+          setNewsData(newsAndSentiment);
+        } catch (newsError) {
+          console.error('Error fetching news and sentiment:', newsError);
+        } finally {
+          setNewsLoading(false);
         }
 
       } catch (err: unknown) {
@@ -361,34 +414,109 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
           </div>
         </div>
 
-        {/* Recent News */}
+        {/* Latest News & Sentiment */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
           <div className="flex items-center gap-2 mb-4">
             <MessageSquare className="h-5 w-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Latest News</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Latest News & Market Sentiment</h3>
           </div>
           
-          {stockDetails.news_sentiment?.feed && stockDetails.news_sentiment.feed.length > 0 ? (
-            <div className="space-y-3">
-              {stockDetails.news_sentiment.feed.slice(0, 3).map((news: any, index: number) => (
-                <div key={index} className="border-l-4 border-blue-200 pl-3">
-                  <a 
-                    href={news.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-sm font-medium text-blue-600 hover:text-blue-800 line-clamp-2"
-                  >
-                    {news.title}
-                  </a>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {new Date(news.time_published).toLocaleDateString()}
-                  </p>
-                </div>
-              ))}
+          {/* Market Sentiment Analysis */}
+          {newsData?.sentiment && (
+            <div className="mb-6">
+              {(() => {
+                const sentConfig = sentimentConfig[newsData.sentiment.overall]
+                return (
+                  <div className={`p-4 rounded-lg border ${sentConfig.bgColor} ${sentConfig.borderColor} mb-4`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{sentConfig.icon}</span>
+                        <span className={`text-lg font-bold ${sentConfig.color}`}>
+                          {sentConfig.label} Sentiment
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm text-gray-500">Score</span>
+                        <p className={`text-lg font-bold ${sentConfig.color}`}>
+                          {(newsData.sentiment.score * 100).toFixed(0)}%
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700">{newsData.sentiment.reasoning}</p>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-gray-500 mb-1">
+                        <span>Confidence</span>
+                        <span>{(newsData.sentiment.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${newsData.sentiment.confidence * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
-          ) : (
-            <p className="text-gray-500 text-sm">No recent news available</p>
           )}
+
+          {/* Latest News */}
+          <div>
+            <h4 className="text-md font-medium text-gray-900 mb-3 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-blue-600" />
+              Recent Headlines
+            </h4>
+            
+            {newsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="p-3 bg-gray-50 rounded-lg border animate-pulse">
+                    <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-gray-300 rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
+            ) : newsData?.news?.length ? (
+              <div className="space-y-3">
+                {newsData.news.map((article, index) => (
+                  <div key={article.uuid || index} className="p-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <h5 className="text-sm font-medium text-gray-900 leading-tight mb-2">
+                          {article.title}
+                        </h5>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <Clock className="h-3 w-3" />
+                          <span>
+                            {new Date(article.providerPublishTime * 1000).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      <a
+                        href={article.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0 p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Read full article"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-lg border text-center">
+                <p className="text-sm text-gray-500">No recent news available for this stock.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
