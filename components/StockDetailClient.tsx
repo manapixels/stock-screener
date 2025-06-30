@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Building2, TrendingUp, DollarSign, BarChart3, MessageSquare, PenTool } from 'lucide-react';
 import { getStockDetails, getStockNote, saveStockNote } from '@/lib/api';
 import { analyzeStock, formatNumber } from '@/lib/stock-analysis';
+import { getCurrencyFromSymbol, formatCurrencyByContext, formatPriceChange } from '@/lib/currency-utils';
 import { MetricCard } from '@/components/ui/metric-card';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { RecommendationBadge } from '@/components/ui/recommendation-badge';
@@ -113,6 +114,9 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
     );
   }
 
+  // Get currency for this stock
+  const currencyCode = getCurrencyFromSymbol(symbol);
+  
   // Generate analysis
   const analysis = analyzeStock(stockDetails, currentPrice);
 
@@ -239,7 +243,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
           <span>{overview?.Industry || 'N/A'}</span>
           <span>•</span>
           <span className="text-2xl font-bold text-gray-900">
-            ${formatNumber(currentPrice, 'number')}
+            {formatCurrencyByContext(currentPrice, currencyCode, 'price')}
           </span>
         </div>
       </div>
@@ -255,6 +259,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
         chartData={chartData}
         chartPeriod={chartPeriod}
         onPeriodChange={setChartPeriod}
+        symbol={symbol}
       />
 
       {/* Financial Health Score */}

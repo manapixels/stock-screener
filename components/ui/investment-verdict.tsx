@@ -1,5 +1,6 @@
 import { Target, TrendingUp, TrendingDown, Minus, DollarSign } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { getCurrencyFromSymbol, formatCurrencyByContext } from '@/lib/currency-utils'
 
 interface PriceTargets {
   goodBuyPrice: number
@@ -25,6 +26,7 @@ interface InvestmentVerdictProps {
   chartData?: ChartData[]
   chartPeriod?: '1W' | '1M' | '1Y'
   onPeriodChange?: (period: '1W' | '1M' | '1Y') => void
+  symbol?: string
 }
 
 const recommendationConfig = {
@@ -72,12 +74,16 @@ export function InvestmentVerdict({
   targetPrice,
   chartData = [],
   chartPeriod = '1M',
-  onPeriodChange
+  onPeriodChange,
+  symbol = ''
 }: InvestmentVerdictProps) {
   const config = recommendationConfig[recommendation]
   const confConfig = confidenceConfig[confidence]
   const valConfig = valuationConfig[priceTargets.currentValue]
   const Icon = config.icon
+  
+  // Get currency for formatting
+  const currencyCode = getCurrencyFromSymbol(symbol)
 
   // Calculate Y-axis domain for better vertical space usage
   const getYAxisDomain = () => {
@@ -150,7 +156,7 @@ export function InvestmentVerdict({
         <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
           <div>
             <span className="text-sm text-gray-500">Current Price</span>
-            <p className="text-lg font-semibold text-gray-900">${currentPrice.toFixed(2)}</p>
+            <p className="text-lg font-semibold text-gray-900">{formatCurrencyByContext(currentPrice, currencyCode, 'price')}</p>
           </div>
           <div className="text-right">
             <span className="text-sm text-gray-500">Valuation</span>
@@ -214,7 +220,7 @@ export function InvestmentVerdict({
                 stroke="#666"
                 domain={getYAxisDomain()}
                 type="number"
-                tickFormatter={(value) => `$${Number(value).toFixed(2)}`}
+                tickFormatter={(value) => formatCurrencyByContext(Number(value), currencyCode, 'price').replace(' ', '')}
               />
               
               {/* Good Buy Price */}
@@ -224,7 +230,7 @@ export function InvestmentVerdict({
                 strokeDasharray="6 6"
                 strokeWidth={3}
                 label={{ 
-                  value: `Good Buy: $${priceTargets.goodBuyPrice}`, 
+                  value: `Good Buy: ${formatCurrencyByContext(priceTargets.goodBuyPrice, currencyCode, 'target')}`, 
                   position: 'insideTopLeft', 
                   fill: '#10b981', 
                   fontSize: 12,
@@ -239,7 +245,7 @@ export function InvestmentVerdict({
                 strokeDasharray="6 6"
                 strokeWidth={3}
                 label={{ 
-                  value: `Good Sell: $${priceTargets.goodSellPrice}`, 
+                  value: `Good Sell: ${formatCurrencyByContext(priceTargets.goodSellPrice, currencyCode, 'target')}`, 
                   position: 'insideTopRight', 
                   fill: '#ef4444', 
                   fontSize: 12,
@@ -253,7 +259,7 @@ export function InvestmentVerdict({
                 stroke="#3b82f6" 
                 strokeDasharray="4 4"
                 strokeWidth={3}
-                label={{ value: `Current: $${currentPrice.toFixed(2)}`, position: 'insideBottomLeft', fill: '#3b82f6', fontSize: 12, fontWeight: 'bold' }}
+                label={{ value: `Current: ${formatCurrencyByContext(currentPrice, currencyCode, 'price')}`, position: 'insideBottomLeft', fill: '#3b82f6', fontSize: 12, fontWeight: 'bold' }}
               />
               
               <Tooltip 
@@ -294,7 +300,7 @@ export function InvestmentVerdict({
               <div className="text-center">
                 <p className="text-xs text-green-600 font-medium mb-1">GOOD BUY PRICE</p>
                 <p className="text-xl font-bold text-green-700">
-                  ${priceTargets.goodBuyPrice}
+                  {formatCurrencyByContext(priceTargets.goodBuyPrice, currencyCode, 'target')}
                 </p>
                 <p className="text-xs text-green-600 mt-1">Target Entry Point</p>
               </div>
@@ -305,7 +311,7 @@ export function InvestmentVerdict({
               <div className="text-center">
                 <p className="text-xs text-red-600 font-medium mb-1">GOOD SELL PRICE</p>
                 <p className="text-xl font-bold text-red-700">
-                  ${priceTargets.goodSellPrice}
+                  {formatCurrencyByContext(priceTargets.goodSellPrice, currencyCode, 'target')}
                 </p>
                 <p className="text-xs text-red-600 mt-1">Target Exit Point</p>
               </div>
@@ -318,7 +324,7 @@ export function InvestmentVerdict({
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
             <div className="text-center">
               <p className="text-xs text-blue-600 font-medium mb-1">12-MONTH TARGET</p>
-              <p className="text-xl font-bold text-blue-700">${targetPrice.toFixed(2)}</p>
+              <p className="text-xl font-bold text-blue-700">{formatCurrencyByContext(targetPrice, currencyCode, 'target')}</p>
               <p className="text-xs text-blue-600 mt-1">
                 {((targetPrice - currentPrice) / currentPrice * 100).toFixed(1)}% potential return
               </p>
@@ -331,9 +337,9 @@ export function InvestmentVerdict({
       <div className="mt-6 p-3 bg-gray-50 rounded-lg">
         <p className="text-sm text-gray-700">
           <span className="font-medium">💡 Summary:</span> 
-          {recommendation === 'BUY' && ` Consider buying if price reaches $${priceTargets.goodBuyPrice} or below.`}
+          {recommendation === 'BUY' && ` Consider buying if price reaches ${formatCurrencyByContext(priceTargets.goodBuyPrice, currencyCode, 'target')} or below.`}
           {recommendation === 'HOLD' && ` Current price is fairly valued. Monitor for entry/exit opportunities.`}
-          {recommendation === 'SELL' && ` Consider taking profits if price reaches $${priceTargets.goodSellPrice} or above.`}
+          {recommendation === 'SELL' && ` Consider taking profits if price reaches ${formatCurrencyByContext(priceTargets.goodSellPrice, currencyCode, 'target')} or above.`}
         </p>
       </div>
     </div>
