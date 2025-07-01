@@ -105,3 +105,24 @@ backend = "postgres"
 # Used to set import_map_path in deno.json file
 # [functions.<function_name>]
 # import_map = "./path/to/import_map.json"
+[functions.professional-analysis]
+enabled = true
+verify_jwt = true
+import_map = "./functions/professional-analysis/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/professional-analysis/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/professional-analysis/*.html" ]
+
+[functions.yahoo-stock-search]
+enabled = true
+verify_jwt = true
+import_map = "./functions/yahoo-stock-search/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/yahoo-stock-search/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/yahoo-stock-search/*.html" ]

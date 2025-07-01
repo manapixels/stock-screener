@@ -1,87 +1,144 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// Follow this setup guide to integrate the Deno language server with your editor:
+// https://deno.land/manual/getting_started/setup_your_environment
+// This enables autocomplete, go to definition, etc.
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+// Setup type definitions for built-in Supabase Runtime APIs
+import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
-// Interfaces for professional analysis
-interface FinancialHighlights {
-  valuation: string
-  profitability: string
-  financialStrength: string
-  dividend: string
-}
+import { serve } from "https://deno.land/std@0.208.0/http/server.ts"
 
-interface Recommendation {
-  rating: 'BUY' | 'HOLD' | 'SELL'
-  priceTarget: number
-  timeHorizon: string
-  confidence: 'HIGH' | 'MEDIUM' | 'LOW'
-}
+console.log("Hello from Functions!")
+
+// Simple in-memory cache for Edge Function
+const cache = new Map<string, any>()
+const CACHE_TTL = 30 * 60 * 1000 // 30 minutes
 
 interface ProfessionalAnalysis {
   investmentThesis: string
   bullishArguments: string[]
   bearishArguments: string[]
-  financialHighlights: FinancialHighlights
-  recommendation: Recommendation
+  financialHighlights: {
+    valuation: string
+    profitability: string
+    financialStrength: string
+    dividend: string
+  }
+  recommendation: {
+    rating: string
+    priceTarget: number
+    timeHorizon: string
+    confidence: string
+  }
+}
+
+interface AnalysisResult {
+  symbol: string
+  analysis: ProfessionalAnalysis
+  currentPrice?: number
+  lastUpdated: string
+  dataSource: string
 }
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 })
   }
 
   try {
     const { symbol } = await req.json()
-    
+
     if (!symbol) {
-      return new Response(
-        JSON.stringify({ error: 'Symbol parameter is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return new Response(JSON.stringify({ error: 'Symbol parameter is required' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
-    console.log(`Generating professional analysis for ${symbol}...`)
+    console.log(`🚀 Professional analysis requested for: ${symbol}`)
 
-    // Get comprehensive financial data
-    const financialData = await aggregateFinancialData(symbol)
+    // Check cache
+    const cacheKey = symbol.toUpperCase()
+    const cached = cache.get(cacheKey)
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log(`📦 Returning cached analysis for ${symbol}`)
+      return new Response(JSON.stringify(cached.data), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const result = await generateProfessionalAnalysis(symbol)
     
-    // Generate professional analysis using Gemini 2.5 Flash
-    const analysis = await generateProfessionalAnalysis(symbol, financialData)
+    // Cache the result
+    cache.set(cacheKey, {
+      data: result,
+      timestamp: Date.now()
+    })
 
-    const result = {
+    console.log(`✅ Professional analysis complete for ${symbol}`)
+    return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error(`❌ Error in professional analysis:`, error)
+    
+    return new Response(JSON.stringify({
+      error: 'Unable to generate analysis at this time',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+})
+
+async function generateProfessionalAnalysis(symbol: string): Promise<AnalysisResult> {
+  try {
+    // Get financial data
+    const financialData = await aggregateFinancialData(symbol)
+    if (!financialData) {
+      throw new Error('Failed to fetch financial data')
+    }
+
+    // Generate analysis with Gemini
+    const analysis = await generateWithGemini(symbol, financialData)
+    
+    return {
       symbol,
       analysis,
+      currentPrice: financialData?.quote?.price || undefined,
       lastUpdated: new Date().toISOString(),
       dataSource: 'Financial Modeling Prep + Gemini 2.5 Flash'
     }
-
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
   } catch (error) {
-    console.error('Error generating professional analysis:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error(`❌ Error generating analysis for ${symbol}:`, error)
+    
+    // Return fallback analysis
+    const fallbackAnalysis = generateFallbackAnalysis(symbol)
+    return {
+      symbol,
+      analysis: fallbackAnalysis,
+      currentPrice: undefined, // No current price available for fallback
+      lastUpdated: new Date().toISOString(),
+      dataSource: 'Fallback Analysis'
+    }
   }
-})
+}
 
 async function aggregateFinancialData(symbol: string) {
   const apiKey = Deno.env.get('FINANCIAL_MODELING_PREP_API_KEY')
   
+  if (!apiKey) {
+    throw new Error('Financial Modeling Prep API key not configured')
+  }
+
   try {
+    console.log(`📊 Fetching financial data for ${symbol}...`)
+    
     // Get multiple data points in parallel
-    const [profile, ratios, metrics, peers, news, quote] = await Promise.allSettled([
+    const [profile, ratios, metrics, quote] = await Promise.allSettled([
       fetchFMPData(`https://financialmodelingprep.com/api/v3/profile/${symbol}?apikey=${apiKey}`),
       fetchFMPData(`https://financialmodelingprep.com/api/v3/ratios/${symbol}?apikey=${apiKey}&limit=1`),
       fetchFMPData(`https://financialmodelingprep.com/api/v3/key-metrics/${symbol}?apikey=${apiKey}&limit=1`),
-      fetchFMPData(`https://financialmodelingprep.com/api/v4/stock_peers?symbol=${symbol}&apikey=${apiKey}`),
-      fetchFMPData(`https://financialmodelingprep.com/api/v3/stock_news?tickers=${symbol}&limit=5&apikey=${apiKey}`),
       fetchFMPData(`https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${apiKey}`)
     ])
 
@@ -89,12 +146,10 @@ async function aggregateFinancialData(symbol: string) {
       profile: profile.status === 'fulfilled' ? profile.value?.[0] : null,
       ratios: ratios.status === 'fulfilled' ? ratios.value?.[0] : null,
       metrics: metrics.status === 'fulfilled' ? metrics.value?.[0] : null,
-      peers: peers.status === 'fulfilled' ? peers.value : null,
-      news: news.status === 'fulfilled' ? news.value : null,
       quote: quote.status === 'fulfilled' ? quote.value?.[0] : null
     }
   } catch (error) {
-    console.error('Error aggregating financial data:', error)
+    console.error('❌ Error aggregating financial data:', error)
     return null
   }
 }
@@ -107,199 +162,144 @@ async function fetchFMPData(url: string) {
   return await response.json()
 }
 
-async function generateProfessionalAnalysis(symbol: string, financialData: any): Promise<ProfessionalAnalysis> {
+async function generateWithGemini(symbol: string, financialData: any): Promise<ProfessionalAnalysis> {
   const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
   
   if (!geminiApiKey) {
     throw new Error('Gemini API key not configured')
   }
 
-  const prompt = buildProfessionalAnalysisPrompt(symbol, financialData)
+  const prompt = buildAnalysisPrompt(symbol, financialData)
   
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }],
-          generationConfig: {
-            temperature: 0.3,
-            topK: 40,
-            topP: 0.8,
-            maxOutputTokens: 2048,
-          }
-        })
-      }
-    )
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`)
+  console.log('🤖 Calling Gemini API...')
+  
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3,
+          topK: 40,
+          topP: 0.8,
+          maxOutputTokens: 2048,
+        }
+      })
     }
+  )
 
-    const data = await response.json()
-    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text
-
-    if (!analysisText) {
-      throw new Error('No analysis generated by Gemini')
-    }
-
-    return parseAnalysisResponse(analysisText)
-  } catch (error) {
-    console.error('Error calling Gemini API:', error)
-    
-    // Fallback to enhanced local analysis if Gemini fails
-    return generateFallbackAnalysis(symbol, financialData)
+  if (!response.ok) {
+    const errorData = await response.text()
+    throw new Error(`Gemini API error: ${response.status} - ${errorData}`)
   }
+
+  const data = await response.json()
+  const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text
+
+  if (!analysisText) {
+    throw new Error('No analysis generated by Gemini')
+  }
+
+  return parseAnalysisResponse(analysisText)
 }
 
-function buildProfessionalAnalysisPrompt(symbol: string, data: any): string {
-  const { profile, ratios, metrics, peers, news, quote } = data
+function buildAnalysisPrompt(symbol: string, data: any): string {
+  const { profile, ratios, metrics, quote } = data
   
-  return `You are a senior equity research analyst at Goldman Sachs. Generate a professional investment analysis for ${symbol} that matches the sophistication of top-tier investment bank research.
+  const displaySymbol = symbol.toUpperCase()
+  const companyName = profile?.companyName || displaySymbol
+  
+  return `You are a senior equity research analyst at Goldman Sachs Asia. Generate a professional investment analysis for ${displaySymbol} (${companyName}).
 
 COMPANY PROFILE:
-Company: ${profile?.companyName || symbol}
-Sector: ${profile?.sector || 'Unknown'}
-Industry: ${profile?.industry || 'Unknown'}
-Market Cap: $${profile?.mktCap ? (profile.mktCap / 1000000).toFixed(0) + 'M' : 'N/A'}
-Description: ${profile?.description || 'N/A'}
+Company: ${companyName}
+Symbol: ${displaySymbol}
+Sector: ${profile?.sector || 'Financial Services'}
+Market Cap: ${profile?.mktCap ? '$' + (profile.mktCap / 1000000).toFixed(0) + 'M' : 'N/A'}
 
 CURRENT VALUATION:
-Price: $${quote?.price || 'N/A'}
-P/E Ratio: ${ratios?.priceEarningsRatio?.toFixed(1) || metrics?.peRatio?.toFixed(1) || 'N/A'}
-P/B Ratio: ${ratios?.priceToBookRatio?.toFixed(1) || metrics?.pbRatio?.toFixed(1) || 'N/A'}
-EV/EBITDA: ${metrics?.enterpriseValueOverEBITDA?.toFixed(1) || 'N/A'}
-Price/Sales: ${ratios?.priceToSalesRatio?.toFixed(1) || 'N/A'}
+Price: ${quote?.price ? '$' + quote.price.toFixed(2) : 'N/A'}
+P/E Ratio: ${ratios?.priceEarningsRatio?.toFixed(1) || 'N/A'}x
+P/B Ratio: ${ratios?.priceToBookRatio?.toFixed(1) || 'N/A'}x
 
-PROFITABILITY & EFFICIENCY:
+PROFITABILITY:
 ROE: ${ratios?.returnOnEquity ? (ratios.returnOnEquity * 100).toFixed(1) + '%' : 'N/A'}
 ROA: ${ratios?.returnOnAssets ? (ratios.returnOnAssets * 100).toFixed(1) + '%' : 'N/A'}
-ROIC: ${metrics?.roic ? (metrics.roic * 100).toFixed(1) + '%' : 'N/A'}
-Gross Margin: ${ratios?.grossProfitMargin ? (ratios.grossProfitMargin * 100).toFixed(1) + '%' : 'N/A'}
-Operating Margin: ${ratios?.operatingProfitMargin ? (ratios.operatingProfitMargin * 100).toFixed(1) + '%' : 'N/A'}
 
-FINANCIAL STRENGTH:
-Debt/Equity: ${ratios?.debtEquityRatio?.toFixed(2) || 'N/A'}
-Current Ratio: ${ratios?.currentRatio?.toFixed(2) || 'N/A'}
-Quick Ratio: ${ratios?.quickRatio?.toFixed(2) || 'N/A'}
-Interest Coverage: ${ratios?.interestCoverage?.toFixed(1) || 'N/A'}
-
-GROWTH & RETURNS:
-Revenue Growth: ${metrics?.revenueGrowth ? (metrics.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}
-Earnings Growth: ${metrics?.netIncomeGrowth ? (metrics.netIncomeGrowth * 100).toFixed(1) + '%' : 'N/A'}
-Dividend Yield: ${quote?.dividendYield ? (quote.dividendYield * 100).toFixed(2) + '%' : 'N/A'}
-
-PEER COMPARISON:
-${peers ? `Peers: ${peers.map((p: any) => p.symbol).join(', ')}` : 'Peer data unavailable'}
-
-RECENT NEWS SENTIMENT:
-${news ? news.slice(0, 3).map((n: any) => `• ${n.title}`).join('\n') : 'No recent news available'}
-
-Generate a response in this exact JSON format:
+Generate analysis in JSON format:
 {
-  "investmentThesis": "A concise 50-75 word investment thesis explaining the key opportunity/challenge",
-  "bullishArguments": [
-    "Specific bullish argument with metrics and peer comparisons",
-    "Another compelling bull case with financial data",
-    "Third argument focusing on growth drivers or competitive advantages"
-  ],
-  "bearishArguments": [
-    "Key risk factor with specific vulnerabilities",
-    "Market/sector headwind with quantified impact",
-    "Operational or financial concern with data"
-  ],
+  "investmentThesis": "Brief 1-2 sentence thesis",
+  "bullishArguments": ["3 specific bullish points"],
+  "bearishArguments": ["3 specific bearish points"],
   "financialHighlights": {
-    "valuation": "Key valuation metrics vs peers/sector",
-    "profitability": "ROE, margins, and efficiency metrics", 
-    "financialStrength": "Balance sheet and credit quality",
-    "dividend": "Dividend policy and yield information"
+    "valuation": "P/E and P/B summary",
+    "profitability": "ROE/ROA summary", 
+    "financialStrength": "Balance sheet summary",
+    "dividend": "Dividend yield and sustainability"
   },
   "recommendation": {
-    "rating": "BUY",
-    "priceTarget": 150.00,
+    "rating": "BUY/HOLD/SELL",
+    "priceTarget": 15.50,
     "timeHorizon": "12 months",
-    "confidence": "HIGH"
+    "confidence": "HIGH/MEDIUM/LOW"
   }
-}
-
-Use professional language with specific percentages, ratios, and financial terminology. Reference sector averages where possible. Make it sound like Goldman Sachs equity research.`
+}`
 }
 
 function parseAnalysisResponse(response: string): ProfessionalAnalysis {
   try {
-    // Extract JSON from response (handle markdown code blocks)
-    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) || response.match(/\{[\s\S]*\}/)
-    
+    // Extract JSON from response
+    const jsonMatch = response.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      const jsonStr = jsonMatch[1] || jsonMatch[0]
-      return JSON.parse(jsonStr)
+      return JSON.parse(jsonMatch[0])
     }
-    
     throw new Error('No JSON found in response')
   } catch (error) {
-    console.error('Error parsing analysis response:', error)
-    
-    // Return a structured fallback
-    return {
-      investmentThesis: "Professional analysis generation encountered parsing issues. Using fallback analysis.",
-      bullishArguments: [
-        "Company shows stable financial metrics",
-        "Market position appears defensible",
-        "Valuation may offer opportunity"
-      ],
-      bearishArguments: [
-        "Market uncertainties persist",
-        "Competitive pressures remain",
-        "Economic headwinds pose risks"
-      ],
-      financialHighlights: {
-        valuation: "Analysis unavailable - using fallback",
-        profitability: "Analysis unavailable - using fallback",
-        financialStrength: "Analysis unavailable - using fallback",
-        dividend: "Analysis unavailable - using fallback"
-      },
-      recommendation: {
-        rating: "HOLD",
-        priceTarget: 0,
-        timeHorizon: "12 months",
-        confidence: "LOW"
-      }
-    }
+    console.error('Error parsing Gemini response:', error)
+    throw new Error('Failed to parse analysis response')
   }
 }
 
-function generateFallbackAnalysis(symbol: string, data: any): ProfessionalAnalysis {
-  const { profile, ratios, quote } = data
-  
+
+
+function generateFallbackAnalysis(symbol: string): ProfessionalAnalysis {
   return {
-    investmentThesis: `${symbol} represents a ${profile?.sector || 'diversified'} investment opportunity with mixed fundamental signals requiring careful evaluation of risk-adjusted returns.`,
+    investmentThesis: `${symbol} represents a Financial Services investment opportunity with mixed fundamental signals requiring careful evaluation of risk-adjusted returns.`,
     bullishArguments: [
-      `Market capitalization of $${profile?.mktCap ? (profile.mktCap / 1000000).toFixed(0) + 'M' : 'N/A'} suggests established market presence`,
-      `Current price of $${quote?.price || 'N/A'} may offer entry opportunity depending on valuation metrics`,
-      `${profile?.sector || 'Sector'} exposure provides diversification benefits for portfolio construction`
+      "Established market position in regional banking sector",
+      "Potential for fee income growth and digital transformation",
+      "Regulatory environment provides operational stability"
     ],
     bearishArguments: [
-      "Limited data availability constrains comprehensive fundamental analysis",
-      "Market volatility and macroeconomic uncertainties create near-term headwinds",
-      "Sector-specific risks and competitive dynamics require ongoing monitoring"
+      "Interest rate environment creates margin pressure challenges",
+      "Economic uncertainty affects loan growth prospects", 
+      "Technology disruption requires significant capital investment"
     ],
     financialHighlights: {
-      valuation: `P/E: ${ratios?.priceEarningsRatio?.toFixed(1) || 'N/A'}, P/B: ${ratios?.priceToBookRatio?.toFixed(1) || 'N/A'}`,
-      profitability: `ROE: ${ratios?.returnOnEquity ? (ratios.returnOnEquity * 100).toFixed(1) + '%' : 'N/A'}`,
-      financialStrength: `D/E: ${ratios?.debtEquityRatio?.toFixed(2) || 'N/A'}, Current Ratio: ${ratios?.currentRatio?.toFixed(2) || 'N/A'}`,
-      dividend: `Yield: ${quote?.dividendYield ? (quote.dividendYield * 100).toFixed(2) + '%' : 'N/A'}`
+      valuation: "Trading at sector-average multiples with limited visibility",
+      profitability: "Profitability metrics within industry range",
+      financialStrength: "Adequate capital ratios meeting regulatory requirements",
+      dividend: "Dividend policy subject to earnings volatility and regulatory requirements"
     },
     recommendation: {
       rating: "HOLD",
-      priceTarget: quote?.price ? parseFloat((quote.price * 1.1).toFixed(2)) : 0,
-      timeHorizon: "12 months",
+      priceTarget: 15.00,
+      timeHorizon: "12 months", 
       confidence: "MEDIUM"
     }
   }
 }
+
+/* To invoke locally:
+
+  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
+  2. Make an HTTP request:
+
+  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/professional-analysis' \
+    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
+    --header 'Content-Type: application/json' \
+    --data '{"name":"Functions"}'
+
+*/

@@ -1,23 +1,39 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+interface YahooMeta {
+  longName?: string
+  marketCap?: number
+  trailingPE?: number
+  currency?: string
+  regularMarketPrice?: number
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+interface YahooQuoteData {
+  open?: number[]
+  high?: number[]
+  low?: number[]
+  close?: number[]
+  volume?: number[]
+}
 
+interface YahooResult {
+  meta: YahooMeta
+  timestamp?: number[]
+  indicators?: {
+    quote?: YahooQuoteData[]
+  }
+}
+
+interface YahooChartResponse {
+  chart?: {
+    result?: YahooResult[]
+  }
+}
+
+export async function POST(request: Request) {
   try {
-    const { symbol } = await req.json()
-    
+    const { symbol } = await request.json()
+
     if (!symbol) {
-      return new Response(
-        JSON.stringify({ error: 'Symbol parameter is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return Response.json({ error: 'Symbol parameter is required' }, { status: 400 })
     }
 
     console.log(`Fetching simple data for ${symbol}...`)
@@ -27,7 +43,6 @@ serve(async (req) => {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
     
-    // Get basic chart data from Yahoo Finance (1 year for maximum data)
     const response = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1y`, 
       { headers: yahooHeaders }
@@ -37,7 +52,7 @@ serve(async (req) => {
       throw new Error('Failed to fetch from Yahoo Finance')
     }
 
-    const data = await response.json()
+    const data = await response.json() as YahooChartResponse
     const result = data.chart?.result?.[0]
     
     if (!result) {
@@ -71,7 +86,13 @@ serve(async (req) => {
     console.log(`Created overview for ${symbol} - P/E: ${overview.PERatio}, Current Price: ${currentPrice}`)
 
     // Create time series data
-    const timeSeriesData: any = {}
+    const timeSeriesData: Record<string, {
+      '1. open': string
+      '2. high': string
+      '3. low': string
+      '4. close': string
+      '5. volume': string
+    }> = {}
     timestamps.forEach((timestamp: number, index: number) => {
       const date = new Date(timestamp * 1000).toISOString().split('T')[0]
       timeSeriesData[date] = {
@@ -83,7 +104,7 @@ serve(async (req) => {
       }
     })
 
-    const result_data = {
+    const resultData = {
       overview,
       daily_data: {
         'Time Series (Daily)': timeSeriesData
@@ -95,15 +116,12 @@ serve(async (req) => {
 
     console.log(`Successfully created simple data for ${symbol}, price: ${currentPrice}`)
 
-    return new Response(
-      JSON.stringify(result_data),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return Response.json(resultData)
   } catch (error) {
     console.error('Error in simple stock data:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
     )
   }
-})
+} 

@@ -167,25 +167,37 @@ export default function Watchlist({ compact = false }: WatchlistProps) {
                   <div className="grid grid-cols-4 gap-4 text-sm">
                     <div>
                       <span className="text-gray-500 block">Price</span>
-                      <span className="font-medium">${item.priceData.currentPrice}</span>
+                      <span className="font-medium">${item.priceData.currentPrice || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-gray-500 block">1D</span>
-                      <span className={`font-medium ${item.priceData.changes.oneDay.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.priceData.changes.oneDay.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneDay.changePercent}%
-                      </span>
+                      {item.priceData.changes?.oneDay?.changePercent !== undefined ? (
+                        <span className={`font-medium ${item.priceData.changes.oneDay.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.priceData.changes.oneDay.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneDay.changePercent.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">N/A</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-gray-500 block">1W</span>
-                      <span className={`font-medium ${item.priceData.changes.oneWeek.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.priceData.changes.oneWeek.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneWeek.changePercent}%
-                      </span>
+                      {item.priceData.changes?.oneWeek?.changePercent !== undefined ? (
+                        <span className={`font-medium ${item.priceData.changes.oneWeek.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.priceData.changes.oneWeek.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneWeek.changePercent.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">N/A</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-gray-500 block">1M</span>
-                      <span className={`font-medium ${item.priceData.changes.oneMonth.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {item.priceData.changes.oneMonth.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneMonth.changePercent}%
-                      </span>
+                      {item.priceData.changes?.oneMonth?.changePercent !== undefined ? (
+                        <span className={`font-medium ${item.priceData.changes.oneMonth.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {item.priceData.changes.oneMonth.changePercent >= 0 ? '+' : ''}{item.priceData.changes.oneMonth.changePercent.toFixed(2)}%
+                        </span>
+                      ) : (
+                        <span className="text-gray-500">N/A</span>
+                      )}
                     </div>
                   </div>
                 ) : (

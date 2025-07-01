@@ -21,12 +21,10 @@ async function getAuthenticatedUser() {
 // Stock search function using Yahoo Finance
 export const searchStocks = async (query: string) => {
   try {
-    // Get data from Yahoo Finance
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-search`, {
+    // Use Next.js API route
+    const response = await fetch('/api/yahoo-stock-search', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ keywords: query }),
@@ -47,12 +45,10 @@ export const searchStocks = async (query: string) => {
 // Get stock details function using Yahoo Finance
 export const getStockDetails = async (symbol: string) => {
   try {
-    // Get comprehensive stock data from Yahoo Finance
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/simple-stock-data`, {
+    // Use Next.js API route
+    const response = await fetch('/api/simple-stock-data', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ symbol }),
@@ -73,12 +69,10 @@ export const getStockDetails = async (symbol: string) => {
 // Get current stock price and price changes using Yahoo Finance
 export const getStockPrice = async (symbol: string) => {
   try {
-    // Get data from Yahoo Finance
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/yahoo-stock-price`, {
+    // Use Next.js API route
+    const response = await fetch('/api/yahoo-stock-price', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ symbol }),
@@ -88,8 +82,33 @@ export const getStockPrice = async (symbol: string) => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    const data = await response.json()
-    return data
+    const rawData = await response.json()
+    
+    // Transform the data to match what Watchlist component expects
+    const transformedData = {
+      symbol: rawData.symbol,
+      name: rawData.name,
+      currentPrice: rawData.price,
+      changes: {
+        oneDay: {
+          change: rawData.change || 0,
+          changePercent: rawData.changePercent || 0
+        },
+        oneWeek: {
+          change: rawData.oneWeekChange || 0,
+          changePercent: rawData.oneWeekChangePercent || 0
+        },
+        oneMonth: {
+          change: rawData.oneMonthChange || 0,
+          changePercent: rawData.oneMonthChangePercent || 0
+        }
+      },
+      currency: rawData.currency,
+      exchange: rawData.exchange,
+      lastUpdated: rawData.lastUpdated
+    }
+    
+    return transformedData
   } catch (error) {
     console.error('Error fetching stock price:', error)
     throw error
@@ -99,11 +118,10 @@ export const getStockPrice = async (symbol: string) => {
 // Get stock news and sentiment analysis using Yahoo Finance
 export const getStockNewsAndSentiment = async (symbol: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/stock-news-sentiment`, {
+    // Use Next.js API route
+    const response = await fetch('/api/stock-news-sentiment', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ symbol }),
@@ -124,18 +142,18 @@ export const getStockNewsAndSentiment = async (symbol: string) => {
 // Get professional investment analysis using Gemini 2.5 Flash
 export const getProfessionalAnalysis = async (symbol: string) => {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/professional-analysis`, {
+    // Use local Next.js API route for development
+    const response = await fetch('/api/professional-analysis', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ symbol }),
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorData = await response.text()
+      throw new Error(`HTTP error! status: ${response.status} - ${errorData}`)
     }
 
     const data = await response.json()

@@ -280,11 +280,10 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
   const { overview } = stockDetails;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 bg-white rounded-lg p-12 shadow-sm border border-gray-200 max-w-6xl mx-auto">
       {/* Header Section */}
       <div className="text-center space-y-4">
         <div className="flex items-center justify-center gap-3">
-          <Building2 className="h-8 w-8 text-blue-600" />
           <h1 className="text-4xl font-bold text-gray-900">
             {overview?.Name || symbol.toUpperCase()}
           </h1>
@@ -327,13 +326,10 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
       </div>
 
       {/* Key Metrics Grid */}
-      <div>
-        <div className="flex items-center gap-2 mb-6">
-          <BarChart3 className="h-5 w-5 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">Key Financial Metrics</h2>
-        </div>
+      <div className="space-y-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Key Financial Metrics</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="P/E Ratio"
             value={formatNumber(overview?.PERatio, 'ratio')}
@@ -373,11 +369,8 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
       </div>
 
       {/* Professional Investment Analysis */}
-      <div>
-        <div className="flex items-center gap-2 mb-6">
-          <TrendingUp className="h-5 w-5 text-gray-700" />
-          <h2 className="text-2xl font-semibold text-gray-900">Investment Analysis</h2>
-        </div>
+      <div className="space-y-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Investment Analysis</h2>
         
         <ProfessionalAnalysis symbol={symbol} />
       </div>
@@ -414,10 +407,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
         {/* Latest News & Sentiment */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <div className="flex items-center gap-2 mb-4">
-            <MessageSquare className="h-5 w-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Latest News & Market Sentiment</h3>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest News & Market Sentiment</h3>
           
           {/* Market Sentiment Analysis */}
           {newsData?.sentiment && (
@@ -461,8 +451,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
           {/* Latest News */}
           <div>
-            <h4 className="text-md font-medium text-gray-900 mb-3 flex items-center gap-2">
-              <Clock className="h-4 w-4 text-blue-600" />
+            <h4 className="text-md font-medium text-gray-900 mb-3">
               Recent Headlines
             </h4>
             
@@ -520,10 +509,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
       {/* Personal Notes */}
       <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center gap-2 mb-4">
-          <PenTool className="h-5 w-5 text-gray-700" />
-          <h3 className="text-lg font-semibold text-gray-900">My Investment Notes</h3>
-        </div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">My Investment Notes</h3>
         
         <textarea
           className="w-full h-32 p-3 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
