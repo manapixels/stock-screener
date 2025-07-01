@@ -18,18 +18,41 @@ interface TelegramWebhookPayload {
     text?: string
     date: number
   }
+  callback_query?: {
+    id: string
+    from: {
+      id: number
+      is_bot: boolean
+      first_name: string
+      last_name?: string
+      username?: string
+    }
+    message: {
+      message_id: number
+      chat: {
+        id: number
+        type: string
+      }
+    }
+    data: string
+  }
 }
 
 interface TelegramBotCommand {
   command: string
   symbol?: string
+  symbols?: string[]
   value?: number
   direction?: 'above' | 'below'
   args: string[]
 }
 
+// Analysis cache to track recent research
+const recentAnalyses = new Map<string, { symbol: string, timestamp: number, recommendation: string }>()
+const RECENT_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
+
 // Telegram Formatter Functions
-function formatAnalysisForTelegram(analysis: any, symbol: string): string {
+function formatAnalysisForTelegram(analysis: any, symbol: string, isCached: boolean = false): string {
   if (!analysis || !analysis.analysis) {
     return `📊 *${symbol} Analysis*\n\n❌ Unable to generate analysis at this time. Please try again later.`
   }
@@ -44,6 +67,14 @@ function formatAnalysisForTelegram(analysis: any, symbol: string): string {
   const recEmoji = rating.toLowerCase().includes('buy') ? '📈' : 
                    rating.toLowerCase().includes('sell') ? '📉' : '⚖️'
   const confEmoji = confidence === 'HIGH' ? '🟢' : confidence === 'MEDIUM' ? '🟡' : '🔴'
+  const cacheIndicator = isCached ? '📦 ' : '🔍 '
+
+  // Store in recent analyses
+  recentAnalyses.set(symbol, {
+    symbol,
+    timestamp: Date.now(),
+    recommendation: rating
+  })
 
   // Helper function to format arguments with bold titles
   function formatArgument(arg: string, index: number): string {
@@ -56,7 +87,10 @@ function formatAnalysisForTelegram(analysis: any, symbol: string): string {
     return `${index + 1}. ${arg}`
   }
 
-  return `📊 *${symbol} Professional Analysis*
+  // Generate related stocks suggestions
+  const relatedSuggestions = getRelatedStockSuggestions(symbol)
+
+  return `${cacheIndicator}📊 *${symbol} Professional Analysis*
 
 💭 *Investment Thesis:*
 ${data.investmentThesis || 'Analysis in progress...'}
@@ -78,23 +112,111 @@ ${data.bearishArguments?.slice(0, 2).map((arg: string, i: number) => formatArgum
 🏦 ${data.financialHighlights?.financialStrength || 'Financial strength assessment loading...'}
 💸 ${data.financialHighlights?.dividend || 'Dividend analysis loading...'}
 
-🔍 Use /search to find more stocks or /help for commands.`
+${relatedSuggestions ? `💡 *Related:* ${relatedSuggestions}` : ''}
+
+🔍 Use /recent for research history or /help for commands.`
+}
+
+function getRelatedStockSuggestions(symbol: string): string {
+  const techStocks = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META']
+  const bankStocks = ['JPM', 'BAC', 'WFC', 'C', 'GS', 'MS']
+  const retailStocks = ['WMT', 'HD', 'COST', 'TGT', 'LOW']
+  
+  if (techStocks.includes(symbol)) {
+    const others = techStocks.filter(s => s !== symbol).slice(0, 2)
+    return others.map(s => `/research ${s}`).join(', ')
+  } else if (bankStocks.includes(symbol)) {
+    const others = bankStocks.filter(s => s !== symbol).slice(0, 2)
+    return others.map(s => `/research ${s}`).join(', ')
+  } else if (retailStocks.includes(symbol)) {
+    const others = retailStocks.filter(s => s !== symbol).slice(0, 2)
+    return others.map(s => `/research ${s}`).join(', ')
+  }
+  
+  return ''
+}
+
+function createAnalysisInlineKeyboard(symbol: string, priceTarget?: number): any {
+  const buttons = []
+  
+  if (priceTarget) {
+    buttons.push([
+      {
+        text: `🚨 Alert at $${priceTarget}`,
+        callback_data: `alert_${symbol}_${priceTarget}_above`
+      }
+    ])
+  }
+  
+  buttons.push([
+    {
+      text: '⭐ Add to Watchlist',
+      callback_data: `watchlist_add_${symbol}`
+    },
+    {
+      text: '🔍 Related Stocks',
+      callback_data: `related_${symbol}`
+    }
+  ])
+  
+  return {
+    inline_keyboard: buttons
+  }
 }
 
 function formatStockSearchForTelegram(results: any[]): string {
   if (!results || results.length === 0) {
-    return '🔍 *Search Results*\n\n❌ No stocks found matching your query.'
+    return '🔍 *Search Results*\n\n❌ No stocks found matching your query.\n\n💡 Try searching with a company name or different keywords.'
   }
 
   const formatted = results.slice(0, 5).map((stock, i) => 
-    `${i + 1}. *${stock.symbol}* - ${stock.name}\n   📍 ${stock.exchange || 'N/A'}`
+    `${i + 1}. *${stock.symbol}* - ${stock.name}\n   📍 ${stock.exchange || 'N/A'} | /research ${stock.symbol}`
   ).join('\n\n')
 
-  return `🔍 *Search Results*\n\n${formatted}\n\n💡 Use /research [SYMBOL] to analyze any stock.`
+  return `🔍 *Search Results*\n\n${formatted}\n\n💡 Tap any /research command above for analysis.`
 }
 
-function formatErrorForTelegram(message: string, command?: string): string {
-  const helpText = command ? `\n\n💡 Use /${command} [PARAMS] or /help for guidance.` : '\n\n💡 Use /help to see available commands.'
+function formatRecentAnalyses(): string {
+  const recent = Array.from(recentAnalyses.values())
+    .filter(item => Date.now() - item.timestamp < RECENT_CACHE_TTL)
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, 10)
+
+  if (recent.length === 0) {
+    return `📊 *Recent Research*\n\n📭 No recent analyses found.\n\n💡 Use /research SYMBOL to start analyzing stocks.`
+  }
+
+  const formatted = recent.map((item, i) => {
+    const timeAgo = formatTimeAgo(Date.now() - item.timestamp)
+    const recEmoji = item.recommendation.toLowerCase().includes('buy') ? '📈' : 
+                     item.recommendation.toLowerCase().includes('sell') ? '📉' : '⚖️'
+    return `${i + 1}. ${recEmoji} *${item.symbol}* - ${item.recommendation} (${timeAgo})`
+  }).join('\n')
+
+  return `📊 *Recent Research*\n\n${formatted}\n\n🔄 Use /research SYMBOL for fresh analysis`
+}
+
+function formatTimeAgo(ms: number): string {
+  const minutes = Math.floor(ms / (1000 * 60))
+  const hours = Math.floor(ms / (1000 * 60 * 60))
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24))
+
+  if (minutes < 60) return `${minutes}m ago`
+  if (hours < 24) return `${hours}h ago`
+  return `${days}d ago`
+}
+
+function formatErrorForTelegram(message: string, command?: string, suggestions?: string[]): string {
+  let helpText = ''
+  
+  if (suggestions && suggestions.length > 0) {
+    helpText = `\n\n💡 *Suggestions:*\n${suggestions.map(s => `• ${s}`).join('\n')}`
+  } else if (command) {
+    helpText = `\n\n💡 Use /${command} [PARAMS] or /help for guidance.`
+  } else {
+    helpText = '\n\n💡 Use /help to see available commands.'
+  }
+  
   return `❌ *Error*\n\n${message}${helpText}`
 }
 
@@ -103,7 +225,9 @@ function formatHelpForTelegram(): string {
 
 📊 *Analysis:*
 • /research AAPL - Get professional stock analysis
+• /research AAPL TSLA MSFT - Analyze multiple stocks
 • /search apple inc - Search for stocks
+• /recent - View recent research history
 
 🔗 *Account Features:*
 • /link TOKEN - Link your web account
@@ -121,7 +245,12 @@ function formatHelpForTelegram(): string {
 🌐 *Get Started:*
 1. Try /research AAPL for instant analysis
 2. Use /search to find stocks
-3. Link your account for alerts & watchlist`
+3. Link your account for alerts & watchlist
+
+💡 *Pro Tips:*
+• Use inline buttons after analysis for quick actions
+• Research multiple stocks: /research AAPL MSFT GOOGL
+• Check /recent for your analysis history`
 }
 
 function formatWatchlistForTelegram(watchlist: any[]): string {
@@ -148,7 +277,6 @@ ${directionEmoji} *${symbol}* - Alert when price goes *${direction}* $${price}
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 // Use service role for database operations (webhooks don't provide user auth)
@@ -187,8 +315,15 @@ serve(async (req: Request) => {
     const command = parseCommand(text)
     console.log('🔍 Parsed command:', command)
 
+    // Handle callback queries from inline keyboards
+    if (payload.callback_query) {
+      await handleCallbackQuery(payload.callback_query)
+      return new Response('OK', { status: 200 })
+    }
+
     // Handle different commands
     let response: string
+    let inlineKeyboard: any = undefined
     
     switch (command.command) {
       case 'start':
@@ -201,7 +336,9 @@ serve(async (req: Request) => {
         response = await handleLinkCommand(chatId, command.args[0], message.from)
         break
       case 'research':
-        response = await handleResearchCommand(chatId, command.symbol)
+        const result = await handleResearchCommand(chatId, command.symbols || [command.symbol].filter(Boolean))
+        response = result.response
+        inlineKeyboard = result.inlineKeyboard
         break
       case 'search':
         response = await handleSearchCommand(command.args.join(' '))
@@ -215,12 +352,15 @@ serve(async (req: Request) => {
       case 'watchlist':
         response = await handleWatchlistCommand(chatId)
         break
+      case 'recent':
+        response = formatRecentAnalyses()
+        break
       default:
         response = formatErrorForTelegram('Unknown command. Use /help to see available commands.')
     }
 
     // Send response to Telegram
-    await sendTelegramMessage(chatId, response)
+    await sendTelegramMessage(chatId, response, inlineKeyboard)
     
     return new Response('OK', { status: 200 })
   } catch (error) {
@@ -235,13 +375,19 @@ function parseCommand(text: string): TelegramBotCommand {
   const args = parts.slice(1)
 
   let symbol: string | undefined
+  let symbols: string[] | undefined
   let value: number | undefined
   let direction: 'above' | 'below' = 'above'
 
   // Parse based on command type
   switch (command) {
     case 'research':
-      symbol = args[0]?.toUpperCase()
+      if (args.length > 1) {
+        // Multiple symbols
+        symbols = args.map(arg => arg.toUpperCase()).filter(s => s.length > 0)
+      } else {
+        symbol = args[0]?.toUpperCase()
+      }
       break
     case 'alert':
       symbol = args[0]?.toUpperCase()
@@ -257,6 +403,7 @@ function parseCommand(text: string): TelegramBotCommand {
   return {
     command,
     symbol,
+    symbols,
     value,
     direction,
     args
@@ -318,18 +465,62 @@ Use /help to see all available commands!`
   }
 }
 
-async function handleResearchCommand(chatId: string, symbol?: string): Promise<string> {
-  if (!symbol) {
-    return formatErrorForTelegram('Please provide a stock symbol. Example: /research AAPL', 'research')
+async function handleResearchCommand(chatId: string, symbols: string[]): Promise<{ response: string, inlineKeyboard?: any }> {
+  if (!symbols || symbols.length === 0) {
+    return {
+      response: formatErrorForTelegram(
+        'Please provide a stock symbol. Example: /research AAPL', 
+        'research',
+        ['Try /research AAPL', 'Use /search apple to find symbols', 'Check /recent for history']
+      )
+    }
   }
 
+  // Handle multiple symbols
+  if (symbols.length > 1) {
+    if (symbols.length > 5) {
+      return {
+        response: formatErrorForTelegram(
+          'Too many symbols. Please analyze up to 5 stocks at once.',
+          'research',
+          [`Try /research ${symbols.slice(0, 3).join(' ')}`, 'Analyze stocks individually for detailed reports']
+        )
+      }
+    }
+
+    return await handleMultipleResearch(chatId, symbols)
+  }
+
+  const symbol = symbols[0]
+
   try {
+    // Send initial status message
+    await sendTelegramMessage(chatId, `🔍 Analyzing ${symbol}... This may take 10-15 seconds.`)
+    
+    // Send typing indicator
+    await sendChatAction(chatId, 'typing')
+
+    // Check if we need to suggest correct symbol
+    const suggestedSymbol = await validateOrSuggestSymbol(symbol)
+    if (suggestedSymbol && suggestedSymbol !== symbol) {
+      return {
+        response: formatErrorForTelegram(
+          `Symbol "${symbol}" not found. Did you mean ${suggestedSymbol}?`,
+          'research',
+          [`Try /research ${suggestedSymbol}`, `Use /search ${symbol} to find correct symbol`]
+        )
+      }
+    }
+
+    // Send progress update
+    await sendTelegramMessage(chatId, '📊 Fetching financial data...')
+    await sendChatAction(chatId, 'typing')
+
     // Call the professional analysis API
     const response = await fetch(`${SUPABASE_URL}/functions/v1/professional-analysis`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-        // No Authorization header - function deployed with --no-verify-jwt
       },
       body: JSON.stringify({ symbol })
     })
@@ -338,12 +529,118 @@ async function handleResearchCommand(chatId: string, symbol?: string): Promise<s
       throw new Error(`API call failed: ${response.status}`)
     }
 
+    // Send final progress update
+    await sendTelegramMessage(chatId, '🤖 Generating AI insights...')
+    await sendChatAction(chatId, 'typing')
+
     const analysis = await response.json()
-    return formatAnalysisForTelegram(analysis, symbol)
+    
+    // Check if this was from cache
+    const isCached = analysis.lastUpdated && (Date.now() - new Date(analysis.lastUpdated).getTime()) < 1800000 // 30 min
+
+    const finalResponse = formatAnalysisForTelegram(analysis, symbol, isCached)
+    const priceTarget = analysis.analysis?.recommendation?.priceTarget
+    const inlineKeyboard = createAnalysisInlineKeyboard(symbol, priceTarget)
+
+    return {
+      response: finalResponse,
+      inlineKeyboard
+    }
   } catch (error) {
     console.error('Error getting analysis:', error)
-    return formatErrorForTelegram('Unable to analyze stock at this time. Please try again later.', 'research')
+    
+    let errorMessage = 'Unable to analyze stock at this time.'
+    const suggestions = ['Check if symbol is correct', 'Try again in a few moments', 'Use /search to find symbols']
+    
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        errorMessage = '⏱️ Analysis timed out. This can happen during high traffic.'
+        suggestions.unshift('Try again in 30 seconds')
+      } else if (error.message.includes('404')) {
+        errorMessage = `Stock symbol "${symbol}" not found.`
+        suggestions.unshift(`Use /search ${symbol} to find correct symbol`)
+      }
+    }
+    
+    return {
+      response: formatErrorForTelegram(errorMessage, 'research', suggestions)
+    }
   }
+}
+
+async function handleMultipleResearch(chatId: string, symbols: string[]): Promise<{ response: string }> {
+  const estimatedTime = symbols.length * 15
+  await sendTelegramMessage(chatId, `🔍 Analyzing ${symbols.length} stocks... (~${estimatedTime} seconds total)`)
+  
+  const results: string[] = []
+  
+  for (let i = 0; i < symbols.length; i++) {
+    const symbol = symbols[i]
+    
+    try {
+      await sendChatAction(chatId, 'typing')
+      await sendTelegramMessage(chatId, `✅ ${symbol} complete (${i + 1}/${symbols.length})`)
+      
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/professional-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ symbol })
+      })
+
+      if (response.ok) {
+        const analysis = await response.json()
+        const rating = analysis.analysis?.recommendation?.rating || 'HOLD'
+        const priceTarget = analysis.analysis?.recommendation?.priceTarget
+        const confidence = analysis.analysis?.recommendation?.confidence || 'MEDIUM'
+        
+        const recEmoji = rating.toLowerCase().includes('buy') ? '📈' : 
+                         rating.toLowerCase().includes('sell') ? '📉' : '⚖️'
+        const confEmoji = confidence === 'HIGH' ? '🟢' : confidence === 'MEDIUM' ? '🟡' : '🔴'
+        
+        results.push(`${recEmoji} *${symbol}*: ${rating}${priceTarget ? ` ($${priceTarget})` : ''} ${confEmoji}`)
+      } else {
+        results.push(`❌ *${symbol}*: Analysis failed`)
+      }
+    } catch {
+      results.push(`❌ *${symbol}*: Error occurred`)
+    }
+  }
+
+  const summary = results.join('\n')
+  return {
+    response: `📊 *Multi-Stock Analysis Summary*\n\n${summary}\n\n💡 Use /research SYMBOL individually for detailed analysis.`
+  }
+}
+
+async function validateOrSuggestSymbol(symbol: string): Promise<string | null> {
+  try {
+    // Try a quick search to validate or suggest correct symbol
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/yahoo-stock-search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query: symbol })
+    })
+
+    if (response.ok) {
+      const results = await response.json()
+      if (results.quotes && results.quotes.length > 0) {
+        // If exact match found, return it
+        const exactMatch = results.quotes.find((q: any) => q.symbol === symbol)
+        if (exactMatch) return symbol
+        
+        // Otherwise return the first result as suggestion
+        return results.quotes[0].symbol
+      }
+    }
+  } catch (error) {
+    console.error('Error validating symbol:', error)
+  }
+  
+  return null
 }
 
 async function handleSearchCommand(query: string): Promise<string> {
@@ -486,23 +783,29 @@ async function handleWatchlistCommand(chatId: string): Promise<string> {
   return formatWatchlistForTelegram([])
 }
 
-async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
+async function sendTelegramMessage(chatId: string, text: string, replyMarkup?: any): Promise<void> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('❌ Telegram bot token not configured')
     return
   }
 
   try {
+    const body: any = {
+      chat_id: chatId,
+      text: text,
+      parse_mode: 'Markdown'
+    }
+
+    if (replyMarkup) {
+      body.reply_markup = replyMarkup
+    }
+
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown'
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {
@@ -514,4 +817,144 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<void> 
   } catch (error) {
     console.error('❌ Error sending Telegram message:', error)
   }
+}
+
+async function sendChatAction(chatId: string, action: string): Promise<void> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    return
+  }
+
+  try {
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        action: action
+      }),
+    })
+  } catch (error) {
+    console.error('❌ Error sending chat action:', error)
+  }
+}
+
+async function handleCallbackQuery(callbackQuery: any): Promise<void> {
+  const chatId = callbackQuery.message.chat.id.toString()
+  const data = callbackQuery.data
+  const callbackQueryId = callbackQuery.id
+
+  let response = ''
+
+  try {
+    if (data.startsWith('alert_')) {
+      // Format: alert_SYMBOL_PRICE_DIRECTION
+      const parts = data.split('_')
+      const symbol = parts[1]
+      const price = parseFloat(parts[2])
+      const direction = parts[3] as 'above' | 'below'
+
+      response = await handleAlertCommand(chatId, symbol, price, direction)
+    } else if (data.startsWith('watchlist_add_')) {
+      // Format: watchlist_add_SYMBOL
+      const symbol = data.replace('watchlist_add_', '')
+      response = await handleWatchlistAdd(chatId, symbol)
+    } else if (data.startsWith('related_')) {
+      // Format: related_SYMBOL
+      const symbol = data.replace('related_', '')
+      response = await handleRelatedStocks(symbol)
+    } else {
+      response = 'Unknown action. Please try again.'
+    }
+
+    // Answer callback query
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text: '✅ Action completed'
+      }),
+    })
+
+    // Send response message
+    await sendTelegramMessage(chatId, response)
+  } catch (error) {
+    console.error('Error handling callback query:', error)
+    
+    // Answer callback query with error
+    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        text: '❌ Action failed'
+      }),
+    })
+  }
+}
+
+async function handleWatchlistAdd(chatId: string, symbol: string): Promise<string> {
+  // Check if user is linked
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, telegram_chat_id')
+    .eq('telegram_chat_id', chatId)
+    .single()
+
+  if (!profile) {
+    return formatErrorForTelegram(
+      'Please link your account first using /link [TOKEN]. Get a token from the web app settings.',
+      undefined,
+      ['Visit the web app settings page', 'Generate a link token', 'Use /link TOKEN command']
+    )
+  }
+
+  try {
+    // Check if already in watchlist
+    const { data: existing } = await supabase
+      .from('watchlist_items')
+      .select('id')
+      .eq('user_id', profile.id)
+      .eq('symbol', symbol)
+      .single()
+
+    if (existing) {
+      return `⭐ *${symbol}* is already in your watchlist.\n\n💡 View your watchlist in the web app or use /watchlist command.`
+    }
+
+    // Add to watchlist
+    const { error } = await supabase
+      .from('watchlist_items')
+      .insert({
+        user_id: profile.id,
+        symbol: symbol,
+        name: null // Will be populated by the web app
+      })
+
+    if (error) {
+      console.error('Error adding to watchlist:', error)
+      return formatErrorForTelegram('Failed to add to watchlist. Please try again.')
+    }
+
+    return `⭐ *${symbol}* added to your watchlist!\n\n📱 View and manage your watchlist in the web app.\n💡 Use /watchlist to see your list.`
+  } catch (error) {
+    console.error('Error handling watchlist add:', error)
+    return formatErrorForTelegram('An error occurred while adding to watchlist. Please try again.')
+  }
+}
+
+async function handleRelatedStocks(symbol: string): Promise<string> {
+  const suggestions = getRelatedStockSuggestions(symbol)
+  
+  if (!suggestions) {
+    return `🔍 *Related Stocks for ${symbol}*\n\n💡 Try searching for stocks in the same sector:\n• /search technology\n• /search banking\n• /search retail\n\nOr explore trending stocks:\n• /research NVDA\n• /research TSLA\n• /research GOOGL`
+  }
+
+  return `🔍 *Related to ${symbol}*\n\n${suggestions}\n\n💡 Use any /research command above for analysis.`
 } 

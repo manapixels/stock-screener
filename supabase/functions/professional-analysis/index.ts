@@ -93,14 +93,25 @@ serve(async (req: Request) => {
 
 async function generateProfessionalAnalysis(symbol: string): Promise<AnalysisResult> {
   try {
+    console.log(`[${symbol}] Starting analysis...`)
+
     // Get financial data
     const financialData = await aggregateFinancialData(symbol)
     if (!financialData) {
       throw new Error('Failed to fetch financial data')
     }
 
+    // Check for empty data
+    if (!financialData.profile && !financialData.ratios && !financialData.metrics) {
+      console.warn(`[${symbol}] No financial data returned from API.`)
+      throw new Error('No financial data available for symbol.')
+    }
+
+    console.log(`[${symbol}] Financial data aggregated successfully.`)
+
     // Generate analysis with Gemini
     const analysis = await generateWithGemini(symbol, financialData)
+    console.log(`[${symbol}] Gemini analysis generated successfully.`)
     
     return {
       symbol,
@@ -110,10 +121,12 @@ async function generateProfessionalAnalysis(symbol: string): Promise<AnalysisRes
       dataSource: 'Financial Modeling Prep + Gemini 2.5 Flash'
     }
   } catch (error) {
-    console.error(`❌ Error generating analysis for ${symbol}:`, error)
+    console.error(`❌ [${symbol}] Error generating analysis:`, error.message)
     
     // Return fallback analysis
     const fallbackAnalysis = generateFallbackAnalysis(symbol)
+    console.log(`[${symbol}] Returning fallback analysis.`)
+
     return {
       symbol,
       analysis: fallbackAnalysis,
@@ -128,11 +141,12 @@ async function aggregateFinancialData(symbol: string) {
   const apiKey = Deno.env.get('FINANCIAL_MODELING_PREP_API_KEY')
   
   if (!apiKey) {
+    console.error('FINANCIAL_MODELING_PREP_API_KEY not configured.')
     throw new Error('Financial Modeling Prep API key not configured')
   }
 
   try {
-    console.log(`📊 Fetching financial data for ${symbol}...`)
+    console.log(`[${symbol}] Fetching financial data...`)
     
     // Get multiple data points in parallel
     const [profile, ratios, metrics, quote] = await Promise.allSettled([
@@ -142,14 +156,27 @@ async function aggregateFinancialData(symbol: string) {
       fetchFMPData(`https://financialmodelingprep.com/api/v3/quote/${symbol}?apikey=${apiKey}`)
     ])
 
+    const fulfilled = (p: PromiseSettledResult<any>) => p.status === 'fulfilled'
+    const rejected = (p: PromiseSettledResult<any>) => p.status === 'rejected'
+
+    if ([profile, ratios, metrics, quote].some(rejected)) {
+      console.warn(`[${symbol}] Some financial data requests failed.`)
+      // Log reasons for rejections
+      ;[profile, ratios, metrics, quote].forEach((p, i) => {
+        if (p.status === 'rejected') {
+          console.error(`  - Request ${i} failed:`, p.reason.message)
+        }
+      })
+    }
+
     return {
-      profile: profile.status === 'fulfilled' ? profile.value?.[0] : null,
-      ratios: ratios.status === 'fulfilled' ? ratios.value?.[0] : null,
-      metrics: metrics.status === 'fulfilled' ? metrics.value?.[0] : null,
-      quote: quote.status === 'fulfilled' ? quote.value?.[0] : null
+      profile: fulfilled(profile) ? profile.value?.[0] : null,
+      ratios: fulfilled(ratios) ? ratios.value?.[0] : null,
+      metrics: fulfilled(metrics) ? metrics.value?.[0] : null,
+      quote: fulfilled(quote) ? quote.value?.[0] : null
     }
   } catch (error) {
-    console.error('❌ Error aggregating financial data:', error)
+    console.error(`[${symbol}] Error aggregating financial data:`, error.message)
     return null
   }
 }
@@ -157,21 +184,29 @@ async function aggregateFinancialData(symbol: string) {
 async function fetchFMPData(url: string) {
   const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    const errorBody = await response.text()
+    console.error(`FMP API Error: ${response.status} - ${errorBody}`)
+    throw new Error(`HTTP error! status: ${response.status}, body: ${errorBody}`)
   }
-  return await response.json()
+  const data = await response.json()
+  if (data['Error Message']) {
+    console.error(`FMP API returned error: ${data['Error Message']}`)
+    throw new Error(`FMP API Error: ${data['Error Message']}`)
+  }
+  return data
 }
 
 async function generateWithGemini(symbol: string, financialData: any): Promise<ProfessionalAnalysis> {
   const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
   
   if (!geminiApiKey) {
+    console.error('GEMINI_API_KEY not configured.')
     throw new Error('Gemini API key not configured')
   }
 
   const prompt = buildAnalysisPrompt(symbol, financialData)
   
-  console.log('🤖 Calling Gemini API...')
+  console.log(`[${symbol}] Calling Gemini API...`)
   
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
@@ -192,6 +227,7 @@ async function generateWithGemini(symbol: string, financialData: any): Promise<P
 
   if (!response.ok) {
     const errorData = await response.text()
+    console.error(`[${symbol}] Gemini API error: ${response.status} - ${errorData}`)
     throw new Error(`Gemini API error: ${response.status} - ${errorData}`)
   }
 
@@ -199,10 +235,18 @@ async function generateWithGemini(symbol: string, financialData: any): Promise<P
   const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text
 
   if (!analysisText) {
-    throw new Error('No analysis generated by Gemini')
+    console.error(`[${symbol}] No analysis text returned from Gemini.`)
+    throw new Error('No content returned from Gemini API.')
   }
 
-  return parseAnalysisResponse(analysisText)
+  try {
+    const parsedAnalysis = parseAnalysisResponse(analysisText)
+    return parsedAnalysis
+  } catch (error) {
+    console.error(`[${symbol}] Error parsing Gemini response:`, error.message)
+    console.log(`[${symbol}] Raw Gemini response:`, analysisText)
+    throw new Error('Failed to parse Gemini analysis response.')
+  }
 }
 
 function buildAnalysisPrompt(symbol: string, data: any): string {
@@ -261,8 +305,6 @@ function parseAnalysisResponse(response: string): ProfessionalAnalysis {
     throw new Error('Failed to parse analysis response')
   }
 }
-
-
 
 function generateFallbackAnalysis(symbol: string): ProfessionalAnalysis {
   return {
