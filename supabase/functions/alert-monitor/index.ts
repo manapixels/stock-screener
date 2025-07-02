@@ -1,6 +1,6 @@
-// @ts-ignore: Deno imports
+// @ts-expect-error: Deno imports
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-// @ts-ignore: Deno imports  
+// @ts-expect-error: Deno imports  
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -15,6 +15,16 @@ interface Alert {
   alert_type: string
   threshold: number
   is_active: boolean
+}
+
+interface StockData {
+  symbol: string
+  current_price: number | null
+  pe_ratio: number | null
+  rsi: number | null
+  moving_averages: { [key: string]: number }
+  bollinger_bands: { [key: string]: number }
+  overview: { symbol: string }
 }
 
 serve(async (req: Request) => {
@@ -101,60 +111,72 @@ serve(async (req: Request) => {
 
 async function getStockData(symbol: string) {
   try {
-    // Use Yahoo Finance for price data
-    const yahooHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
+    // Use centralized price fetching function
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1mo`, 
-      { headers: yahooHeaders }
-    )
+    const response = await fetch(`${supabaseUrl}/functions/v1/yahoo-stock-price`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ symbol })
+    })
 
     if (!response.ok) {
-      throw new Error('Failed to fetch from Yahoo Finance')
+      throw new Error('Failed to fetch price data from centralized function')
     }
 
-    const data = await response.json()
-    const result = data.chart?.result?.[0]
+    const priceData = await response.json()
     
-    if (!result) {
-      throw new Error('No data found for symbol')
+    // Also get stock data for moving averages calculation
+    const stockDataResponse = await fetch(`${supabaseUrl}/functions/v1/yahoo-stock-data`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ symbol })
+    })
+
+         const movingAverages: { [key: string]: number } = {}
+     let peRatio = null
+
+     if (stockDataResponse.ok) {
+       const stockData = await stockDataResponse.json()
+       
+       // Calculate moving averages from time series data
+       const timeSeries = stockData.daily_data?.['Time Series (Daily)'] || {}
+       const closes = Object.values(timeSeries)
+         .map((day: { '4. close': string }) => parseFloat(day['4. close']))
+         .filter(price => !isNaN(price))
+         .reverse() // Most recent first
+      
+      // Calculate simple moving averages
+      if (closes.length >= 50) {
+        const ma50 = closes.slice(0, 50).reduce((sum, price) => sum + price, 0) / 50
+        movingAverages.ma_50 = ma50
+      }
+      
+      if (closes.length >= 200) {
+        const ma200 = closes.slice(0, 200).reduce((sum, price) => sum + price, 0) / 200
+        movingAverages.ma_200 = ma200
+      }
+
+      // Extract P/E ratio from overview
+      if (stockData.overview?.PERatio) {
+        peRatio = parseFloat(stockData.overview.PERatio)
+      }
     }
 
-    const meta = result.meta
-    const timestamps = result.timestamp || []
-    const quotes = result.indicators?.quote?.[0] || {}
-    const closes = quotes.close || []
-    
-    // Extract current price from latest data
-    let currentPrice = closes[closes.length - 1] || meta?.regularMarketPrice || null
-    const movingAverages: { [key: string]: number } = {}
-    
-    // Calculate simple moving averages from closes array
-    if (closes.length >= 50) {
-      const ma50 = closes.slice(-50).reduce((sum, price) => sum + price, 0) / 50
-      movingAverages.ma_50 = ma50
-    }
-    
-    if (closes.length >= 200) {
-      const ma200 = closes.slice(-200).reduce((sum, price) => sum + price, 0) / 200
-      movingAverages.ma_200 = ma200
-    }
-
-    // For now, set technical indicators to null as Yahoo Finance doesn't provide RSI/Bollinger directly
+    // For now, set technical indicators to null as they require more complex calculations
     const currentRsi = null
     const bollingerBands: { [key: string]: number } = {}
-    
-    // Basic P/E ratio from meta data
-    let peRatio = null
-    if (meta?.trailingPE) {
-      peRatio = meta.trailingPE
-    }
 
     return {
       symbol,
-      current_price: currentPrice,
+      current_price: priceData.price,
       pe_ratio: peRatio,
       rsi: currentRsi,
       moving_averages: movingAverages,
@@ -167,7 +189,7 @@ async function getStockData(symbol: string) {
   }
 }
 
-async function evaluateAlertCondition(alert: Alert, stockData: any): Promise<boolean> {
+async function evaluateAlertCondition(alert: Alert, stockData: StockData): Promise<boolean> {
   const { alert_type, threshold } = alert
 
   switch (alert_type) {
@@ -207,7 +229,7 @@ async function evaluateAlertCondition(alert: Alert, stockData: any): Promise<boo
   }
 }
 
-async function triggerAlert(alert: Alert, stockData: any, supabase: any) {
+async function triggerAlert(alert: Alert, stockData: StockData, supabase: ReturnType<typeof createClient>) {
   try {
     // Get user's Telegram settings
     const { data: profile, error } = await supabase
@@ -233,7 +255,7 @@ async function triggerAlert(alert: Alert, stockData: any, supabase: any) {
   }
 }
 
-function formatAlertMessage(alert: Alert, stockData: any): string {
+function formatAlertMessage(alert: Alert, stockData: StockData): string {
   const { symbol, alert_type, threshold } = alert
   const currentPrice = stockData.current_price || 'N/A'
   
