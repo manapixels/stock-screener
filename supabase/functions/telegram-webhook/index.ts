@@ -51,6 +51,141 @@ interface TelegramBotCommand {
 const recentAnalyses = new Map<string, { symbol: string, timestamp: number, recommendation: string }>()
 const RECENT_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
+// Authentication Types and Constants
+interface AuthenticatedUser {
+  id: string
+  telegram_user_id: string
+  telegram_chat_id: string
+  email?: string
+  display_name?: string
+}
+
+// Define public (unauthenticated) vs protected (authenticated) commands
+const PUBLIC_COMMANDS = ['start', 'help', 'signup', 'link']
+const PROTECTED_COMMANDS = ['research', 'recent', 'search', 'alert', 'alerts', 'watchlist']
+
+// Authentication Functions
+async function authenticateUser(telegramUserId: number, chatId: string): Promise<AuthenticatedUser | null> {
+  try {
+    console.log(`🔐 Authenticating user: telegram_id=${telegramUserId}, chat_id=${chatId}`)
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('id, telegram_user_id, telegram_chat_id, email, display_name')
+      .eq('telegram_user_id', telegramUserId.toString())
+      .eq('telegram_chat_id', chatId)
+      .single()
+
+    if (error) {
+      console.log(`❌ Authentication failed: ${error.message}`)
+      return null
+    }
+
+    if (!profile) {
+      console.log(`❌ No user found for telegram_id=${telegramUserId}`)
+      return null
+    }
+
+    console.log(`✅ User authenticated: ${profile.id}`)
+    return {
+      id: profile.id,
+      telegram_user_id: profile.telegram_user_id,
+      telegram_chat_id: profile.telegram_chat_id,
+      email: profile.email,
+      display_name: profile.display_name
+    }
+  } catch (error) {
+    console.error('❌ Authentication error:', error)
+    return null
+  }
+}
+
+function formatAuthenticationPrompt(): string {
+  return `🔒 **Authentication Required**
+
+To use research, alerts, and watchlist features, you need an account:
+
+🆕 **New User?**
+Use /signup to create an account with Telegram
+
+🔗 **Have a web account?**
+Use /link [TOKEN] to connect your accounts.
+Get a token from your account settings on the web app.
+
+💡 **Public Commands:**
+• /help - View all commands
+• /start - Welcome message
+
+🚀 Create an account to unlock personalized stock analysis!`
+}
+
+function createAuthenticationInlineKeyboard(): any {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '📝 Sign Up with Telegram',
+          callback_data: 'auth_signup'
+        },
+        {
+          text: '🔗 Link Web Account',
+          callback_data: 'auth_link'
+        }
+      ],
+      [
+        {
+          text: '💡 Help',
+          callback_data: 'auth_help'
+        }
+      ]
+    ]
+  }
+}
+
+function formatSignupPrompt(firstName: string): string {
+  return `📝 **Welcome ${firstName}!**
+
+Let's create your Stock Screener account:
+
+✨ **What you'll get:**
+• 🚀 Professional stock analysis
+• 📊 Personal watchlists
+• 🚨 Price alerts via Telegram
+• 📱 Cross-platform sync
+
+🔄 **Creating your account...**
+This will just take a moment!`
+}
+
+function formatSignupSuccess(displayName: string): string {
+  return `🎉 **Account Created Successfully!**
+
+Welcome aboard, ${displayName}! 
+
+✅ **You now have access to:**
+• /research [STOCK] - Professional analysis
+• /watchlist - Manage your stocks
+• /alerts - Set price notifications
+• /recent - View research history
+
+🚀 **Try it out:**
+Send /research AAPL to get started!
+
+💡 Use /help anytime to see all commands.`
+}
+
+function formatSignupError(error: string): string {
+  return `❌ **Signup Failed**
+
+${error}
+
+🔄 **Try again:**
+• Use /signup to retry
+• Or /link [TOKEN] if you have a web account
+
+💬 Contact support if you continue having issues.`
+}
+
 // Telegram Formatter Functions
 function formatAnalysisForTelegram(analysis: any, symbol: string, isCached: boolean = false): string {
   if (!analysis || !analysis.analysis) {
@@ -275,14 +410,16 @@ ${directionEmoji} *${symbol}* - Alert when price goes *${direction}* $${price}
 📊 Use /alerts to view all your active alerts.`
 }
 
+// Global environment variables
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-// Use service role for database operations (webhooks don't provide user auth)
+// Global Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 serve(async (req: Request) => {
+  console.log('📱 Webhook request received:', req.method)
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -303,6 +440,14 @@ serve(async (req: Request) => {
     const payload: TelegramWebhookPayload = await req.json()
     console.log('📱 Telegram webhook received:', JSON.stringify(payload, null, 2))
 
+    // Handle callback queries from inline keyboards FIRST (button presses)
+    if (payload.callback_query) {
+      console.log('🔘 Processing callback query:', payload.callback_query.data)
+      await handleCallbackQuery(payload.callback_query)
+      return new Response('OK', { status: 200 })
+    }
+
+    // Handle regular messages
     if (!payload.message || !payload.message.text) {
       return new Response('OK', { status: 200 })
     }
@@ -315,10 +460,17 @@ serve(async (req: Request) => {
     const command = parseCommand(text)
     console.log('🔍 Parsed command:', command)
 
-    // Handle callback queries from inline keyboards
-    if (payload.callback_query) {
-      await handleCallbackQuery(payload.callback_query)
-      return new Response('OK', { status: 200 })
+    // Check authentication for protected commands
+    let authenticatedUser: AuthenticatedUser | null = null
+    if (PROTECTED_COMMANDS.includes(command.command)) {
+      authenticatedUser = await authenticateUser(message.from.id, chatId)
+      
+      if (!authenticatedUser) {
+        console.log(`🔒 Unauthenticated user tried to access protected command: ${command.command}`)
+        await sendTelegramMessage(chatId, formatAuthenticationPrompt(), createAuthenticationInlineKeyboard())
+        return new Response('OK', { status: 200 })
+      }
+      console.log(`✅ Authenticated user ${authenticatedUser.id} accessing ${command.command}`)
     }
 
     // Handle different commands
@@ -335,8 +487,13 @@ serve(async (req: Request) => {
       case 'link':
         response = await handleLinkCommand(chatId, command.args[0], message.from)
         break
+      case 'signup':
+        const signupResult = await handleSignupCommand(chatId, message.from)
+        response = signupResult.response
+        inlineKeyboard = signupResult.inlineKeyboard
+        break
       case 'research':
-        const result = await handleResearchCommand(chatId, command.symbols || [command.symbol].filter(Boolean))
+        const result = await handleResearchCommand(chatId, command.symbols || [command.symbol].filter(Boolean), authenticatedUser!)
         response = result.response
         inlineKeyboard = result.inlineKeyboard
         break
@@ -344,13 +501,13 @@ serve(async (req: Request) => {
         response = await handleSearchCommand(command.args.join(' '))
         break
       case 'alert':
-        response = await handleAlertCommand(chatId, command.symbol, command.value, command.direction)
+        response = await handleAlertCommand(chatId, command.symbol, command.value, command.direction, authenticatedUser!)
         break
       case 'alerts':
-        response = await handleAlertsCommand(chatId)
+        response = await handleAlertsCommand(chatId, authenticatedUser!)
         break
       case 'watchlist':
-        response = await handleWatchlistCommand(chatId)
+        response = await handleWatchlistCommand(chatId, authenticatedUser!)
         break
       case 'recent':
         response = formatRecentAnalyses()
@@ -426,6 +583,103 @@ If you have a web account, use /link [TOKEN] to connect your accounts.
 🚀 Start exploring the markets with professional analysis!`
 }
 
+async function handleSignupCommand(chatId: string, from: any): Promise<{ response: string, inlineKeyboard?: any }> {
+  try {
+    // Check if user already exists
+    const existingUser = await authenticateUser(from.id, chatId)
+    if (existingUser) {
+      return {
+        response: `✅ **Account Already Exists**
+
+You're already signed up, ${existingUser.display_name || from.first_name}! 
+
+🚀 **Start using your account:**
+• /research AAPL - Professional analysis
+• /watchlist - Manage your stocks
+• /alerts - Set price notifications
+
+💡 Use /help to see all commands.`
+      }
+    }
+
+    // Show signup progress message
+    await sendTelegramMessage(chatId, formatSignupPrompt(from.first_name))
+    await sendChatAction(chatId, 'typing')
+
+    // Call signup function
+    const supabaseUrl = SUPABASE_URL
+    const supabaseServiceKey = SUPABASE_SERVICE_ROLE_KEY
+
+    const signupResponse = await fetch(`${supabaseUrl}/functions/v1/telegram-signup`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        telegram_user_id: from.id,
+        telegram_chat_id: chatId,
+        first_name: from.first_name,
+        last_name: from.last_name,
+        username: from.username
+      })
+    })
+
+    if (!signupResponse.ok) {
+      const errorData = await signupResponse.json()
+      return {
+        response: formatSignupError(errorData.message || 'Failed to create account')
+      }
+    }
+
+    const result = await signupResponse.json()
+    
+    if (result.success) {
+      const displayName = `${from.first_name}${from.last_name ? ' ' + from.last_name : ''}`
+      return {
+        response: formatSignupSuccess(displayName)
+      }
+    } else {
+      return {
+        response: formatSignupError(result.message || 'Account creation failed')
+      }
+    }
+  } catch (error) {
+    console.error('❌ Signup command error:', error)
+    return {
+      response: formatSignupError('An unexpected error occurred during signup. Please try again.')
+    }
+  }
+}
+
+async function handleAuthCallbackQuery(chatId: string, data: string, from: any): Promise<string> {
+  switch (data) {
+    case 'auth_signup':
+      // Trigger signup flow
+      const signupResult = await handleSignupCommand(chatId, from)
+      return signupResult.response
+    
+    case 'auth_link':
+      return `🔗 **Link Your Web Account**
+
+To link your existing web account:
+
+1️⃣ Open the Stock Screener web app
+2️⃣ Go to Account Settings
+3️⃣ Generate a Telegram Link Token
+4️⃣ Send: /link [YOUR_TOKEN]
+
+📱 **Don't have a web account yet?**
+Use /signup to create one with Telegram!`
+    
+    case 'auth_help':
+      return formatHelpForTelegram()
+    
+    default:
+      return 'Unknown authentication option. Please try again.'
+  }
+}
+
 async function handleLinkCommand(chatId: string, token: string, from: any): Promise<string> {
   if (!token) {
     return formatErrorForTelegram('Please provide a link token. Get one from your account settings on the web app.', 'link')
@@ -465,7 +719,7 @@ Use /help to see all available commands!`
   }
 }
 
-async function handleResearchCommand(chatId: string, symbols: string[]): Promise<{ response: string, inlineKeyboard?: any }> {
+async function handleResearchCommand(chatId: string, symbols: string[], user: AuthenticatedUser): Promise<{ response: string, inlineKeyboard?: any }> {
   if (!symbols || symbols.length === 0) {
     return {
       response: formatErrorForTelegram(
@@ -525,8 +779,12 @@ async function handleResearchCommand(chatId: string, symbols: string[]): Promise
       body: JSON.stringify({ symbol })
     })
 
+    console.log(`📊 Professional analysis response status: ${response.status}`)
+
     if (!response.ok) {
-      throw new Error(`API call failed: ${response.status}`)
+      const errorText = await response.text()
+      console.error(`❌ Professional analysis API error: ${response.status} - ${errorText}`)
+      throw new Error(`API call failed: ${response.status} - ${errorText}`)
     }
 
     // Send final progress update
@@ -534,6 +792,11 @@ async function handleResearchCommand(chatId: string, symbols: string[]): Promise
     await sendChatAction(chatId, 'typing')
 
     const analysis = await response.json()
+    console.log(`✅ Professional analysis received for ${symbol}:`, {
+      hasAnalysis: !!analysis.analysis,
+      dataSource: analysis.dataSource,
+      currentPrice: analysis.currentPrice
+    })
     
     // Check if this was from cache
     const isCached = analysis.lastUpdated && (Date.now() - new Date(analysis.lastUpdated).getTime()) < 1800000 // 30 min
@@ -675,7 +938,8 @@ async function handleAlertCommand(
   chatId: string, 
   symbol?: string, 
   price?: number, 
-  direction: 'above' | 'below' = 'above'
+  direction: 'above' | 'below' = 'above',
+  user?: AuthenticatedUser
 ): Promise<string> {
   if (!symbol || !price) {
     return formatErrorForTelegram('Usage: /alert SYMBOL PRICE [above|below]\nExample: /alert AAPL 150 above', 'alert')
@@ -716,7 +980,7 @@ async function handleAlertCommand(
   }
 }
 
-async function handleAlertsCommand(chatId: string): Promise<string> {
+async function handleAlertsCommand(chatId: string, user: AuthenticatedUser): Promise<string> {
   // Check if user is linked
   const { data: profile } = await supabase
     .from('profiles')
@@ -767,7 +1031,7 @@ ${alertList}
   }
 }
 
-async function handleWatchlistCommand(chatId: string): Promise<string> {
+async function handleWatchlistCommand(chatId: string, user: AuthenticatedUser): Promise<string> {
   // Check if user is linked
   const { data: profile } = await supabase
     .from('profiles')
@@ -864,6 +1128,9 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
       // Format: related_SYMBOL
       const symbol = data.replace('related_', '')
       response = await handleRelatedStocks(symbol)
+    } else if (data.startsWith('auth_')) {
+      // Handle authentication callback queries
+      response = await handleAuthCallbackQuery(chatId, data, callbackQuery.from)
     } else {
       response = 'Unknown action. Please try again.'
     }

@@ -32,6 +32,31 @@ BEGIN
     END IF;
 END $$;
 
+-- Make email optional for Telegram users
+ALTER TABLE profiles ALTER COLUMN email DROP NOT NULL;
+
+-- Update existing email constraint to allow null but keep uniqueness for non-null values
+-- First drop the constraint, then the index, then recreate with partial index
+DO $$
+BEGIN
+    -- Drop unique constraint if it exists
+    BEGIN
+        ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_email_key;
+    EXCEPTION WHEN undefined_object THEN
+        -- Constraint doesn't exist, ignore
+    END;
+    
+    -- Drop the index if it exists
+    BEGIN
+        DROP INDEX IF EXISTS profiles_email_key;
+    EXCEPTION WHEN undefined_object THEN
+        -- Index doesn't exist, ignore
+    END;
+END $$;
+
+-- Create partial unique index for non-null emails
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_email_unique ON profiles (email) WHERE email IS NOT NULL;
+
 -- Add missing columns to existing profiles table
 ALTER TABLE profiles 
 ADD COLUMN IF NOT EXISTS full_name TEXT,
@@ -41,11 +66,15 @@ ADD COLUMN IF NOT EXISTS telegram_username TEXT,
 ADD COLUMN IF NOT EXISTS telegram_first_name TEXT,
 ADD COLUMN IF NOT EXISTS telegram_last_name TEXT,
 ADD COLUMN IF NOT EXISTS telegram_linked_at TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS telegram_active BOOLEAN DEFAULT FALSE;
+ADD COLUMN IF NOT EXISTS telegram_active BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS telegram_user_id TEXT UNIQUE,
+ADD COLUMN IF NOT EXISTS display_name TEXT,
+ADD COLUMN IF NOT EXISTS signup_method TEXT DEFAULT 'web';
 
 -- Create index for fast telegram lookups
 CREATE INDEX IF NOT EXISTS idx_profiles_telegram_chat_id ON profiles(telegram_chat_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_telegram_username ON profiles(telegram_username);
+CREATE INDEX IF NOT EXISTS idx_profiles_telegram_user_id ON profiles(telegram_user_id);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -77,12 +106,24 @@ CREATE TABLE IF NOT EXISTS telegram_link_tokens (
 -- Enable RLS on telegram_link_tokens
 ALTER TABLE telegram_link_tokens ENABLE ROW LEVEL SECURITY;
 
--- Create policies for telegram_link_tokens
-CREATE POLICY "Users can view own link tokens" ON telegram_link_tokens
-    FOR SELECT USING (auth.uid() = user_id);
+-- Create policies for telegram_link_tokens (using DO block to handle existing policies)
+DO $$
+BEGIN
+    -- Try to create policies, ignore if they already exist
+    BEGIN
+        CREATE POLICY "Users can view own link tokens" ON telegram_link_tokens
+            FOR SELECT USING (auth.uid() = user_id);
+    EXCEPTION WHEN duplicate_object THEN
+        -- Policy already exists, ignore
+    END;
     
-CREATE POLICY "Users can create own link tokens" ON telegram_link_tokens
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+    BEGIN
+        CREATE POLICY "Users can create own link tokens" ON telegram_link_tokens
+            FOR INSERT WITH CHECK (auth.uid() = user_id);
+    EXCEPTION WHEN duplicate_object THEN
+        -- Policy already exists, ignore
+    END;
+END $$;
 
 -- Create index for telegram_link_tokens
 CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_token ON telegram_link_tokens(token);
