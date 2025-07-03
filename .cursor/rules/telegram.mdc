@@ -1,0 +1,4 @@
+---
+description: telegram-webhook and telegram-signup supabase edge functions should be deployed to supabase with --no-verify-jwt since telegram can't pass authorization headers to our supabase
+alwaysApply: false
+---

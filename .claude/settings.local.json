@@ -33,7 +33,10 @@
       "Bash(npx eslint:*)",
       "Bash(timeout 30 npm run lint)",
       "Bash(npx next lint:*)",
-      "Bash(./scripts/deploy-telegram-functions.sh:*)"
+      "Bash(./scripts/deploy-telegram-functions.sh:*)",
+      "Bash(echo:*)",
+      "Bash(TELEGRAM_BOT_TOKEN=\"${TELEGRAM_BOT_TOKEN}\" node scripts/register-telegram-webhook.js info)",
+      "Bash(supabase functions logs:*)"
     ],
     "deny": []
   }

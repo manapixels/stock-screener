@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Types and interfaces
 interface TelegramWebhookPayload {
   message?: {
     message_id: number;
@@ -47,6 +48,60 @@ interface TelegramBotCommand {
   args: string[];
 }
 
+interface TelegramUser {
+  id: number;
+  is_bot: boolean;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+}
+
+interface StockQuote {
+  symbol: string;
+  name: string;
+  exchange?: string;
+}
+
+interface AnalysisData {
+  analysis?: {
+    recommendation?: {
+      rating?: string;
+      priceTarget?: number;
+      confidence?: string;
+      timeHorizon?: string;
+    };
+    investmentThesis?: string;
+    bullishArguments?: string[];
+    bearishArguments?: string[];
+    financialHighlights?: {
+      valuation?: string;
+      profitability?: string;
+      financialStrength?: string;
+      dividend?: string;
+    };
+  };
+  currentPrice?: number;
+  quote?: {
+    price?: number;
+  };
+  lastUpdated?: string;
+  dataSource?: string;
+}
+
+interface InlineKeyboard {
+  inline_keyboard: Array<Array<{
+    text: string;
+    callback_data: string;
+  }>>;
+}
+
+interface WatchlistItem {
+  id: string;
+  symbol: string;
+  company_name?: string;
+  created_at: string;
+}
+
 // Analysis cache to track recent research
 const recentAnalyses = new Map<
   string,
@@ -63,8 +118,7 @@ interface AuthenticatedUser {
   display_name?: string;
 }
 
-// Define public (unauthenticated) vs protected (authenticated) commands
-const PUBLIC_COMMANDS = ["start", "help", "signup", "link"];
+// Define protected (authenticated) commands
 const PROTECTED_COMMANDS = [
   "research",
   "recent",
@@ -136,7 +190,7 @@ Get a token from your account settings on the web app.
 🚀 Create an account to unlock personalized stock analysis!`;
 }
 
-function createAuthenticationInlineKeyboard(): any {
+function createAuthenticationInlineKeyboard(): InlineKeyboard {
   return {
     inline_keyboard: [
       [
@@ -205,7 +259,7 @@ ${error}
 
 // Telegram Formatter Functions
 function formatAnalysisForTelegram(
-  analysis: any,
+  analysis: AnalysisData,
   symbol: string,
   isCached: boolean = false,
 ): string {
@@ -309,7 +363,7 @@ function getRelatedStockSuggestions(symbol: string): string {
 function createAnalysisInlineKeyboard(
   symbol: string,
   priceTarget?: number,
-): any {
+): InlineKeyboard {
   const buttons = [];
 
   if (priceTarget) {
@@ -512,6 +566,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 serve(async (req: Request) => {
   console.log("📱 Webhook request received:", req.method);
+  
+  // Validate environment variables first
+  if (!TELEGRAM_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("❌ Missing required environment variables");
+    return new Response("Configuration error", { status: 500 });
+  }
+
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -550,6 +611,12 @@ serve(async (req: Request) => {
     const message = payload.message;
     const chatId = message.chat.id.toString();
     const text = message.text.trim();
+    
+    // Validate chat ID format (should be a valid number)
+    if (!/^-?\d+$/.test(chatId)) {
+      console.error(`❌ Invalid chat ID format: ${chatId}`);
+      return new Response("OK", { status: 200 });
+    }
 
     // Parse command
     const command = parseCommand(text);
@@ -578,7 +645,7 @@ serve(async (req: Request) => {
 
     // Handle different commands
     let response: string;
-    let inlineKeyboard: any = undefined;
+    let inlineKeyboard: InlineKeyboard | undefined = undefined;
 
     switch (command.command) {
       case "start":
@@ -1305,6 +1372,8 @@ async function sendTelegramMessage(
   }
 
   try {
+    console.log(`📤 Sending message to chat_id: ${chatId}, text length: ${text.length}`);
+    
     const body: any = {
       chat_id: chatId,
       text: text,
@@ -1333,6 +1402,13 @@ async function sendTelegramMessage(
         response.status,
         errorData,
       );
+      console.error("📋 Chat ID that failed:", chatId);
+      console.error("📋 Bot token configured:", TELEGRAM_BOT_TOKEN ? "Yes" : "No");
+      
+      // If chat not found, this might be a test payload or invalid chat
+      if (errorData.includes("chat not found")) {
+        console.log("💡 This might be a test payload with invalid chat_id");
+      }
     } else {
       console.log("✅ Telegram message sent successfully");
     }
