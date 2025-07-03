@@ -13,10 +13,12 @@ interface YahooNewsItem {
   type?: string
   uuid?: string
   publisher?: string
+  summary?: string
 }
 
 interface YahooNewsResponse {
   news?: YahooNewsItem[]
+  stream?: YahooNewsItem[]
 }
 
 interface SentimentAnalysis {
@@ -50,21 +52,54 @@ serve(async (req: Request) => {
 
     console.log(`📰 Fetching news and sentiment for ${symbol}...`)
 
-    // Get news from Yahoo Finance
+    // Get news from Yahoo Finance using the correct news endpoint
     const yahooHeaders = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
     }
     
-    const newsUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${symbol}&lang=en-US&region=US&quotesCount=1&newsCount=10&listsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=true&enableNavLinks=true&enableEnhancedTrivialQuery=true`
+    // Use the correct Yahoo Finance news endpoint that filters by symbol
+    const newsEndpoints = [
+      `https://query1.finance.yahoo.com/v1/finance/search?q=${symbol.toUpperCase()}&modules=news&count=10`,
+      `https://query2.finance.yahoo.com/v1/finance/search?q=${symbol.toUpperCase()}&modules=news&count=10`
+    ]
     
-    const response = await fetch(newsUrl, { headers: yahooHeaders })
+    let response: Response | null = null
+    let lastError: Error | null = null
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch news from Yahoo Finance')
+    // Try each endpoint until one works
+    for (const newsUrl of newsEndpoints) {
+      try {
+        console.log(`📰 Trying endpoint: ${newsUrl}`)
+        response = await fetch(newsUrl, { headers: yahooHeaders })
+        
+        if (response.ok) {
+          console.log(`✅ Successfully fetched from: ${newsUrl}`)
+          break
+        } else {
+          console.log(`❌ Failed endpoint (${response.status}): ${newsUrl}`)
+          lastError = new Error(`HTTP ${response.status}`)
+        }
+      } catch (error) {
+        console.log(`❌ Error with endpoint: ${newsUrl}`, error)
+        lastError = error instanceof Error ? error : new Error('Unknown error')
+        response = null
+      }
+    }
+
+    if (!response || !response.ok) {
+      throw lastError || new Error('All news endpoints failed')
     }
 
     const data = await response.json() as YahooNewsResponse
-    const newsItems = data.news || []
+    console.log(`📊 Raw response structure:`, Object.keys(data))
+    
+    // Yahoo Finance news endpoint returns items in 'stream' property
+    const newsItems = data.stream || data.news || []
+    console.log(`📰 Found ${newsItems.length} raw news items`)
+
+    if (newsItems.length === 0) {
+      console.log('⚠️ No news items found in response:', JSON.stringify(data, null, 2))
+    }
 
     // Format news items
     const formattedNews = newsItems.map(item => ({
@@ -73,8 +108,11 @@ serve(async (req: Request) => {
       providerPublishTime: item.providerPublishTime || Date.now() / 1000,
       type: item.type || 'STORY',
       uuid: item.uuid || Math.random().toString(),
-      publisher: item.publisher || 'Yahoo Finance'
+      publisher: item.publisher || 'Yahoo Finance',
+      summary: item.summary || ''
     })).slice(0, 5) // Limit to 5 news items
+
+    console.log(`📰 Formatted news titles:`, formattedNews.map(n => n.title))
 
     // Generate basic sentiment analysis based on news titles
     const sentiment = generateBasicSentiment(formattedNews)
