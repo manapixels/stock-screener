@@ -113,20 +113,7 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Handle search with debouncing (re-search when market changes)
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([])
-      return
-    }
-
-    const timeoutId = setTimeout(() => {
-      handleSearch()
-    }, 300) // Debounce 300ms
-
-    return () => clearTimeout(timeoutId)
-  }, [query, selectedMarket, handleSearch])
-
+  // Define handleSearch function first
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return
 
@@ -163,6 +150,20 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
       setLoading(false)
     }
   }, [query, selectedMarket])
+
+  // Handle search with debouncing (re-search when market changes)
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([])
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      handleSearch()
+    }, 300) // Debounce 300ms
+
+    return () => clearTimeout(timeoutId)
+  }, [query, selectedMarket, handleSearch])
 
   const handleAddToWatchlist = async (symbol: string, companyName: string) => {
     if (!user) {
