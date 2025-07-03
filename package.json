@@ -19,16 +19,15 @@
     "supabase:generate-types": "npx supabase gen types typescript --local --schema public > ./lib/types/definitions.ts",
     "supabase:generate-migration": "npx supabase db diff | npx supabase migration new",
     "supabase:push": "npx supabase push",
-    "supabase:pull": "npx supabase pull",
-    "prepare": "husky"
+    "supabase:pull": "npx supabase pull"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
       "eslint --fix",
       "prettier --write"
-    ]
+    ],
+    "**/*.ts?(x)": "tsc --noEmit"
   },
-  "prepare": "husky",
   "dependencies": {
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",

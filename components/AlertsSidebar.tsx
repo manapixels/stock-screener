@@ -1,35 +1,39 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from 'react'
-import { Bell, Plus, Settings } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import AlertList from '@/components/AlertList'
-import AlertModal from '@/components/AlertModal'
-import TelegramSettings from '@/components/TelegramSettings'
-import { useAuth } from '@/components/AuthProvider'
+import { useState, useCallback } from "react";
+import { Bell, Plus, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import AlertList from "@/components/AlertList";
+import AlertModal from "@/components/AlertModal";
+import TelegramSettings from "@/components/TelegramSettings";
+import { useAuth } from "@/components/AuthProvider";
 
 interface AlertsSidebarProps {
-  selectedSymbol?: string
-  currentPrice?: number
-  className?: string
+  selectedSymbol?: string;
+  currentPrice?: number;
+  className?: string;
 }
 
-export default function AlertsSidebar({ selectedSymbol, currentPrice, className = '' }: AlertsSidebarProps) {
-  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const { user } = useAuth()
+export default function AlertsSidebar({
+  selectedSymbol,
+  currentPrice,
+  className = "",
+}: AlertsSidebarProps) {
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuth();
 
   const handleAlertCreated = useCallback(() => {
-    setRefreshKey(prev => prev + 1)
-  }, [])
+    setRefreshKey((prev) => prev + 1);
+  }, []);
 
   const handleOpenAlertModal = () => {
     if (!user) {
-      return // AlertModal will handle the auth check
+      return; // AlertModal will handle the auth check
     }
-    setIsAlertModalOpen(true)
-  }
+    setIsAlertModalOpen(true);
+  };
 
   return (
     <>
@@ -100,12 +104,14 @@ export default function AlertsSidebar({ selectedSymbol, currentPrice, className 
         {!user && (
           <div className="p-6 text-center">
             <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-600 font-medium mb-1">Sign in for Price Alerts</p>
+            <p className="text-gray-600 font-medium mb-1">
+              Sign in for Price Alerts
+            </p>
             <p className="text-sm text-gray-500">
               Get notified when your stocks hit target prices
             </p>
             <Button
-              onClick={() => window.location.href = '/auth'}
+              onClick={() => (window.location.href = "/auth")}
               className="mt-3"
               size="sm"
             >
@@ -124,5 +130,5 @@ export default function AlertsSidebar({ selectedSymbol, currentPrice, className 
         onAlertCreated={handleAlertCreated}
       />
     </>
-  )
+  );
 }

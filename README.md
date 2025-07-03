@@ -60,7 +60,7 @@ TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 
 ```bash
 supabase functions deploy stock-search --project-ref your-project-ref
-supabase functions deploy stock-details --project-ref your-project-ref  
+supabase functions deploy stock-details --project-ref your-project-ref
 supabase functions deploy send-telegram-message --project-ref your-project-ref
 supabase functions deploy alert-monitor --project-ref your-project-ref
 ```
@@ -85,6 +85,7 @@ npm run dev
 ## Features
 
 ### ✅ Implemented
+
 - User authentication (Supabase Auth)
 - Stock search and watchlist management
 - Stock details with technical indicators
@@ -93,14 +94,16 @@ npm run dev
 - Real-time updates
 
 ### 🔄 Edge Functions
+
 - **stock-search**: Search stocks via Alpha Vantage API
 - **stock-details**: Get comprehensive stock data
 - **send-telegram-message**: Send notifications via Telegram
 - **alert-monitor**: Background service to check alerts (run via cron)
 
 ### 📊 Alert Types
+
 - P/E Ratio below threshold
-- RSI below threshold  
+- RSI below threshold
 - Price above 50-day/200-day MA
 - Golden Cross detection
 - Bollinger Bands breach
@@ -109,22 +112,26 @@ npm run dev
 ## Database Schema
 
 ### Tables
+
 - `profiles` - User metadata and Telegram settings
 - `watchlist_items` - User's tracked stocks
 - `stock_notes` - User notes on stocks
 - `alerts` - Custom alert configurations
 
 ### Row Level Security
+
 All tables have RLS policies ensuring users can only access their own data.
 
 ## Deployment
 
 ### Frontend (Vercel)
+
 1. Connect repository to Vercel
 2. Set environment variables
 3. Deploy
 
 ### Backend (Supabase)
+
 1. Deploy Edge Functions
 2. Set up cron jobs for alert monitoring
 3. Configure secrets
@@ -132,6 +139,7 @@ All tables have RLS policies ensuring users can only access their own data.
 ## API Endpoints
 
 All API calls go through Supabase Edge Functions:
+
 - `/functions/v1/stock-search` - Search stocks
 - `/functions/v1/stock-details` - Get stock data
 - `/functions/v1/send-telegram-message` - Send notifications
@@ -140,6 +148,7 @@ All API calls go through Supabase Edge Functions:
 ## Development
 
 ### Database Changes
+
 ```bash
 # Create migration
 supabase migration new your_migration_name
@@ -149,6 +158,7 @@ supabase db push
 ```
 
 ### Edge Functions
+
 ```bash
 # Create new function
 supabase functions new function-name
@@ -158,6 +168,7 @@ supabase functions deploy function-name --project-ref your-ref
 ```
 
 ### Local Development
+
 ```bash
 # Start Supabase locally
 supabase start
@@ -172,8 +183,9 @@ npm run dev
 ## Environment Setup
 
 Required services:
+
 1. **Supabase Project** - Database, Auth, Edge Functions
-2. **Alpha Vantage API Key** - Stock data (free tier available)  
+2. **Alpha Vantage API Key** - Stock data (free tier available)
 3. **Telegram Bot Token** - Notifications (optional)
 
 ## Contributing

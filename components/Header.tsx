@@ -1,29 +1,29 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from 'react'
-import { Search, Menu, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import UserInfo from '@/components/UserInfo'
-import SearchModal from '@/components/SearchModal'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from "react";
+import { Search, Menu, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import UserInfo from "@/components/UserInfo";
+import SearchModal from "@/components/SearchModal";
+import { useRouter } from "next/navigation";
 
 interface HeaderProps {
-  onSelectStock?: (symbol: string, name: string) => void
+  onSelectStock?: (symbol: string, name: string) => void;
 }
 
 export default function Header({ onSelectStock }: HeaderProps) {
-  const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const router = useRouter()
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
 
   const handleSelectStock = (symbol: string, name: string) => {
     if (onSelectStock) {
-      onSelectStock(symbol, name)
+      onSelectStock(symbol, name);
     } else {
       // Default behavior: navigate to stock page
-      router.push(`/stock/${symbol}`)
+      router.push(`/stock/${symbol}`);
     }
-  }
+  };
 
   return (
     <>
@@ -33,20 +33,20 @@ export default function Header({ onSelectStock }: HeaderProps) {
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="28" 
-                  height="28" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
                   strokeLinejoin="round"
                   className="text-blue-600"
                 >
-                  <path d="M3 3v18h18"/>
-                  <path d="m19 9-5 5-4-4-3 3"/>
+                  <path d="M3 3v18h18" />
+                  <path d="m19 9-5 5-4-4-3 3" />
                 </svg>
                 <h1 className="text-xl font-bold text-gray-900 hidden sm:block">
                   Signal
@@ -124,28 +124,28 @@ export default function Header({ onSelectStock }: HeaderProps) {
         <button
           onClick={() => setIsSearchOpen(true)}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-              e.preventDefault()
-              setIsSearchOpen(true)
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+              e.preventDefault();
+              setIsSearchOpen(true);
             }
           }}
         />
       </div>
     </>
-  )
+  );
 }
 
 // Hook for global keyboard shortcut
 export function useSearchShortcut(onOpen: () => void) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        onOpen()
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        onOpen();
       }
-    }
+    };
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onOpen])
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onOpen]);
 }

@@ -3,9 +3,11 @@
 ## 📋 Project Overview
 
 ### Vision Statement
+
 A comprehensive web application that empowers individual investors to make informed stock investment decisions through professional-grade analysis, actionable recommendations, and intelligent alerts with integrated Telegram bot for mobile research.
 
 ### Mission
+
 Transform complex financial data into clear, visual insights with buy/sell recommendations, price targets, and risk analysis - making professional equity research accessible to retail investors both on web and mobile through intelligent automation.
 
 ---
@@ -15,6 +17,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 ### ✅ Completed Features
 
 #### Core Infrastructure
+
 - **Authentication System**: Seamless user registration/login with Supabase Auth
 - **Database Architecture**: PostgreSQL with optimized schema for user data, watchlists, alerts, notes, and Telegram integration
 - **API Integration**: Yahoo Finance (primary) + Alpha Vantage (backup) for unlimited data access
@@ -22,6 +25,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **App Router Migration**: All APIs migrated from Pages Router to App Router for better performance
 
 #### Investment Analysis Engine
+
 - **Professional Recommendations**: Buy/Hold/Sell with confidence levels (High/Medium/Low)
 - **Price Targets**: Good Buy Price and Good Sell Price with fair value calculations
 - **Financial Health Scoring**: Comprehensive scoring based on P/E, ROE, Debt/Equity, P/B ratios
@@ -30,12 +34,14 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **OCBC Specialized Analysis**: Enhanced Singapore banking sector analysis
 
 #### Shared Services Architecture
+
 - **Analysis Caching**: 30-minute TTL in-memory cache to reduce API calls and improve performance
 - **Financial Data Service**: Centralized data aggregation from Financial Modeling Prep API
 - **Gemini Analysis Service**: Comprehensive analysis generation with OCBC specialization and fallbacks
 - **Code Deduplication**: Shared services between web app and Telegram bot to maintain consistency
 
 #### User Features
+
 - **Smart Search**: Header-based modal search with keyboard shortcuts (⌘K)
 - **Watchlist Management**: Real-time price tracking with live updates and historical changes (1D/1W/1M)
 - **Price Alerts**: Configurable alerts with Telegram integration and account linking
@@ -44,6 +50,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **Settings Page**: Profile management with Telegram account linking and configuration
 
 #### Telegram Bot Integration
+
 - **Account Linking**: Secure token-based system with 10-minute expiring tokens
 - **Mobile Research**: Full stock analysis accessible via Telegram commands
 - **Alert Integration**: Telegram notifications integrated with existing alert system
@@ -51,6 +58,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **Mobile-Optimized Formatting**: Emoji-rich, concise responses optimized for mobile viewing
 
 #### UI/UX Enhancements
+
 - **Investment Verdict Section**: Integrated chart with buy/sell price indicators
 - **Dashboard Layout**: 2-column layout with persistent sidebar
 - **Enhanced Navigation**: User dropdown menu with settings access
@@ -63,6 +71,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 ## 🏗️ Technical Architecture
 
 ### Frontend Stack
+
 - **Framework**: Next.js 14 with App Router (migrated from Pages Router)
 - **Language**: TypeScript for comprehensive type safety
 - **Styling**: Tailwind CSS with custom components
@@ -70,6 +79,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **UI Components**: Custom component library with consistent design system
 
 ### Backend Infrastructure
+
 - **Database**: Supabase PostgreSQL with Row Level Security
 - **Authentication**: Supabase Auth with social providers
 - **API Layer**: Next.js App Router APIs + Supabase Edge Functions
@@ -77,6 +87,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **Caching**: In-memory caching with TTL for performance optimization
 
 ### Data Sources & APIs
+
 - **Primary**: Yahoo Finance (unlimited requests)
 - **Professional Analysis**: Financial Modeling Prep API
 - **Backup**: Alpha Vantage (25 requests/day)
@@ -84,6 +95,7 @@ Transform complex financial data into clear, visual insights with buy/sell recom
 - **Data Types**: Real-time prices, historical data, fundamentals, technical indicators, news sentiment
 
 ### Database Schema
+
 ```sql
 -- Core Tables
 profiles              # User settings and Telegram configuration (extended)
@@ -94,11 +106,12 @@ stock_notes          # Personal research notes per stock
 -- Telegram Integration
 telegram_link_tokens  # Secure 10-minute expiring tokens for account linking
 -- Extended profiles table with:
--- telegram_chat_id, telegram_username, telegram_first_name, 
+-- telegram_chat_id, telegram_username, telegram_first_name,
 -- telegram_last_name, telegram_linked_at, telegram_active
 ```
 
 ### API Architecture
+
 ```
 User-Facing APIs (App Router - /api/*)
 ├── professional-analysis/route.ts    # Investment analysis with Gemini AI
@@ -124,6 +137,7 @@ Shared Services (lib/services/)
 ## 🤖 Telegram Bot Integration
 
 ### Bot Commands
+
 - `/start` - Welcome message with setup instructions
 - `/help` - Complete command reference and usage guide
 - `/link [TOKEN]` - Link Telegram account to web platform
@@ -134,6 +148,7 @@ Shared Services (lib/services/)
 - `/watchlist` - View watchlist (placeholder for future enhancement)
 
 ### Technical Features
+
 - **Secure Account Linking**: Token-based system with 10-minute expiration
 - **Analysis Caching**: 30-minute cache for improved performance
 - **Error Handling**: Graceful fallbacks when APIs fail
@@ -141,6 +156,7 @@ Shared Services (lib/services/)
 - **Integration**: Full integration with existing alert and analysis systems
 
 ### Security & Privacy
+
 - **Data Protection**: All user data protected by Supabase RLS
 - **Token Security**: Automatic expiration and validation
 - **Privacy Compliance**: Minimal data collection, user-controlled linking
@@ -150,6 +166,7 @@ Shared Services (lib/services/)
 ## 🎨 User Experience Design
 
 ### Information Architecture
+
 1. **Header**: Global search, navigation, user menu with settings access
 2. **Dashboard**: Main content area + watchlist/alerts sidebar
 3. **Stock Analysis**: Investment verdict, metrics, charts, notes
@@ -157,6 +174,7 @@ Shared Services (lib/services/)
 5. **Modals**: Search, alerts, settings overlays
 
 ### Key User Flows
+
 1. **Stock Research**: Search → Analysis → Add to Watchlist → Set Alerts
 2. **Portfolio Monitoring**: Dashboard → Watchlist → Price Alerts
 3. **Investment Decision**: Chart Analysis → Price Targets → Buy/Sell Action
@@ -164,6 +182,7 @@ Shared Services (lib/services/)
 5. **Alert Management**: Web Settings → Generate Token → Telegram Link → Mobile Alerts
 
 ### Mobile-First Design
+
 - **Responsive Layouts**: Optimized for all screen sizes
 - **Touch Interactions**: Mobile-friendly touch targets and gestures
 - **Telegram Integration**: Native mobile research workflow
@@ -174,6 +193,7 @@ Shared Services (lib/services/)
 ## 🔄 Development Workflow
 
 ### Environment Setup
+
 ```bash
 # Development
 npm run dev                    # Start Next.js dev server
@@ -191,6 +211,7 @@ npm run test:telegram         # Test Telegram integration
 ```
 
 ### Code Quality & Standards
+
 - **TypeScript**: Strict mode with comprehensive type coverage
 - **ESLint**: Code linting with custom rules
 - **Shared Services**: Centralized business logic to avoid code duplication
@@ -203,12 +224,14 @@ npm run test:telegram         # Test Telegram integration
 ## 🚀 Future Roadmap
 
 ### Phase 1: Enhanced Mobile Experience
+
 - [ ] Telegram watchlist management commands
 - [ ] Push notifications for critical market events
 - [ ] Voice-to-text stock queries via Telegram
 - [ ] Portfolio performance summaries via bot
 
 ### Phase 2: Advanced Analysis Features
+
 - [ ] AI-powered news sentiment analysis with real-time updates
 - [ ] Earnings calendar integration with alert automation
 - [ ] Dividend tracking and yield analysis
@@ -216,6 +239,7 @@ npm run test:telegram         # Test Telegram integration
 - [ ] Options data integration for advanced strategies
 
 ### Phase 3: Community Features
+
 - [ ] Investment idea sharing and discussion
 - [ ] Social sentiment tracking from financial Twitter
 - [ ] Expert analyst following and recommendations
@@ -226,6 +250,7 @@ npm run test:telegram         # Test Telegram integration
 ## 🔧 Deployment & Operations
 
 ### Production Environment
+
 - **Frontend**: Vercel with automatic deployments from GitHub
 - **Backend**: Supabase hosted PostgreSQL and Edge Functions
 - **APIs**: Next.js App Router APIs hosted on Vercel
@@ -234,6 +259,7 @@ npm run test:telegram         # Test Telegram integration
 - **Analytics**: User behavior and feature usage tracking
 
 ### Security Considerations
+
 - **Data Protection**: Row Level Security for all user data
 - **API Security**: Rate limiting and authentication tokens
 - **Financial Data**: Compliance with data usage agreements
@@ -241,6 +267,7 @@ npm run test:telegram         # Test Telegram integration
 - **Privacy**: Minimal data collection with user-controlled integrations
 
 ### Performance Optimization
+
 - **Caching Strategy**: 30-minute analysis cache with intelligent invalidation
 - **API Efficiency**: Shared services to minimize external API calls
 - **Mobile Performance**: Optimized Telegram responses for mobile networks
@@ -251,6 +278,7 @@ npm run test:telegram         # Test Telegram integration
 ## 📝 Development Guidelines
 
 ### Code Standards
+
 - Use TypeScript strict mode with comprehensive type definitions
 - Implement shared services to avoid code duplication between web and mobile
 - Follow functional programming patterns where possible
@@ -258,6 +286,7 @@ npm run test:telegram         # Test Telegram integration
 - Write self-documenting code with clear variable names
 
 ### UI/UX Principles
+
 - Mobile-first responsive design for web and Telegram
 - Accessibility compliance (WCAG guidelines)
 - Consistent color scheme and typography across platforms
@@ -265,6 +294,7 @@ npm run test:telegram         # Test Telegram integration
 - Error-resilient data handling with graceful fallbacks
 
 ### API Design
+
 - RESTful endpoints with consistent response formats
 - Proper HTTP status codes and error messages
 - Type-safe request/response interfaces
@@ -272,6 +302,7 @@ npm run test:telegram         # Test Telegram integration
 - Performance optimization through caching and efficient data fetching
 
 ### Performance Optimization
+
 - Lazy load components and data where appropriate
 - Implement proper caching strategies (30-minute analysis TTL)
 - Optimize images and assets for fast loading
@@ -283,12 +314,14 @@ npm run test:telegram         # Test Telegram integration
 ## 🎯 Key Success Metrics
 
 ### Technical KPIs
+
 - **API Response Time**: < 2 seconds for analysis generation
 - **Cache Hit Rate**: > 80% for repeated analysis requests
 - **Error Rate**: < 1% for critical user flows
 - **Mobile Performance**: Fast Telegram response times
 
 ### User Experience KPIs
+
 - **Search to Analysis**: < 10 seconds for complete stock research
 - **Mobile Adoption**: Telegram bot usage and engagement rates
 - **Alert Accuracy**: Reliable price alert delivery

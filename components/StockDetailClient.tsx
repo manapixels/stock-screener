@@ -1,31 +1,39 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from 'react';
-import { ExternalLink, Clock } from 'lucide-react';
-import { getStockDetails, getStockNote, saveStockNote, getStockNewsAndSentiment } from '@/lib/api';
-import { analyzeStock, formatNumber } from '@/lib/stock-analysis';
-import { getCurrencyFromSymbol, formatCurrencyByContext } from '@/lib/currency-utils';
-import { MetricCard } from '@/components/ui/metric-card';
-import { ScoreGauge } from '@/components/ui/score-gauge';
-import { InvestmentVerdict } from '@/components/ui/investment-verdict';
-import { ProfessionalAnalysis } from '@/components/ui/professional-analysis';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { ExternalLink, Clock } from "lucide-react";
+import {
+  getStockDetails,
+  getStockNote,
+  saveStockNote,
+  getStockNewsAndSentiment,
+} from "@/lib/api";
+import { analyzeStock, formatNumber } from "@/lib/stock-analysis";
+import {
+  getCurrencyFromSymbol,
+  formatCurrencyByContext,
+} from "@/lib/currency-utils";
+import { MetricCard } from "@/components/ui/metric-card";
+import { ScoreGauge } from "@/components/ui/score-gauge";
+import { InvestmentVerdict } from "@/components/ui/investment-verdict";
+import { ProfessionalAnalysis } from "@/components/ui/professional-analysis";
+import { toast } from "sonner";
 
 // Note: Using any for external API data with complex/unknown structure
 /* eslint-disable @typescript-eslint/no-explicit-any */
 interface NewsItem {
-  title: string
-  link: string
-  providerPublishTime: number
-  type: string
-  uuid: string
+  title: string;
+  link: string;
+  providerPublishTime: number;
+  type: string;
+  uuid: string;
 }
 
 interface SentimentAnalysis {
-  overall: 'bullish' | 'bearish' | 'neutral'
-  score: number
-  confidence: number
-  reasoning: string
+  overall: "bullish" | "bearish" | "neutral";
+  score: number;
+  confidence: number;
+  reasoning: string;
 }
 
 interface StockDetails {
@@ -44,36 +52,42 @@ interface StockDetailClientProps {
 }
 
 const sentimentConfig = {
-  bullish: { 
-    label: 'Bullish', 
-    color: 'text-green-600', 
-    bgColor: 'bg-green-50', 
-    borderColor: 'border-green-200',
-    icon: '🐂'
+  bullish: {
+    label: "Bullish",
+    color: "text-green-600",
+    bgColor: "bg-green-50",
+    borderColor: "border-green-200",
+    icon: "🐂",
   },
-  bearish: { 
-    label: 'Bearish', 
-    color: 'text-red-600', 
-    bgColor: 'bg-red-50', 
-    borderColor: 'border-red-200',
-    icon: '🐻'
+  bearish: {
+    label: "Bearish",
+    color: "text-red-600",
+    bgColor: "bg-red-50",
+    borderColor: "border-red-200",
+    icon: "🐻",
   },
-  neutral: { 
-    label: 'Neutral', 
-    color: 'text-gray-600', 
-    bgColor: 'bg-gray-50', 
-    borderColor: 'border-gray-200',
-    icon: '⚪'
-  }
-}
+  neutral: {
+    label: "Neutral",
+    color: "text-gray-600",
+    bgColor: "bg-gray-50",
+    borderColor: "border-gray-200",
+    icon: "⚪",
+  },
+};
 
-export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetailClientProps) {
+export default function StockDetailClient({
+  symbol,
+  onPriceUpdate,
+}: StockDetailClientProps) {
   const [stockDetails, setStockDetails] = useState<StockDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [noteContent, setNoteContent] = useState<string>('');
-  const [chartPeriod, setChartPeriod] = useState<'1W' | '1M' | '1Y'>('1M');
-  const [newsData, setNewsData] = useState<{ news: NewsItem[], sentiment: SentimentAnalysis } | null>(null);
+  const [noteContent, setNoteContent] = useState<string>("");
+  const [chartPeriod, setChartPeriod] = useState<"1W" | "1M" | "1Y">("1M");
+  const [newsData, setNewsData] = useState<{
+    news: NewsItem[];
+    sentiment: SentimentAnalysis;
+  } | null>(null);
   const [newsLoading, setNewsLoading] = useState(false);
 
   useEffect(() => {
@@ -97,13 +111,13 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
           const newsAndSentiment = await getStockNewsAndSentiment(symbol);
           setNewsData(newsAndSentiment);
         } catch (newsError) {
-          console.error('Error fetching news and sentiment:', newsError);
+          console.error("Error fetching news and sentiment:", newsError);
         } finally {
           setNewsLoading(false);
         }
-
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch stock details.';
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to fetch stock details.";
         setError(errorMessage);
         toast.error(errorMessage);
       } finally {
@@ -115,9 +129,17 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
   }, [symbol]);
 
   // Calculate current price when stockDetails changes
-  const currentPrice = stockDetails?.currentPrice || 
-    (stockDetails?.daily_data?.['Time Series (Daily)'] ? 
-      parseFloat((Object.values(stockDetails.daily_data['Time Series (Daily)'])[0] as any)?.['4. close'] || '0') : 0);
+  const currentPrice =
+    stockDetails?.currentPrice ||
+    (stockDetails?.daily_data?.["Time Series (Daily)"]
+      ? parseFloat(
+          (
+            Object.values(
+              stockDetails.daily_data["Time Series (Daily)"],
+            )[0] as any
+          )?.["4. close"] || "0",
+        )
+      : 0);
 
   // Update parent component with current price
   useEffect(() => {
@@ -131,7 +153,8 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
       await saveStockNote(symbol, noteContent);
       toast.success("Note saved successfully!");
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       toast.error(errorMessage);
     }
   };
@@ -150,7 +173,9 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <p className="text-red-600 text-lg font-medium">Error loading stock data</p>
+        <p className="text-red-600 text-lg font-medium">
+          Error loading stock data
+        </p>
         <p className="text-red-500 text-sm mt-2">{error}</p>
       </div>
     );
@@ -159,65 +184,77 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
   if (!stockDetails) {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-        <p className="text-gray-600">No stock details found for {symbol.toUpperCase()}</p>
+        <p className="text-gray-600">
+          No stock details found for {symbol.toUpperCase()}
+        </p>
       </div>
     );
   }
 
   // Get currency for this stock
   const currencyCode = getCurrencyFromSymbol(symbol);
-  
+
   // Generate analysis
   const analysis = analyzeStock(stockDetails, currentPrice);
 
   // Format chart data based on selected period
-  const dailyData = stockDetails.daily_data?.['Time Series (Daily)'];
-  
+  const dailyData = stockDetails.daily_data?.["Time Series (Daily)"];
+
   const getChartData = () => {
     if (!dailyData) return [];
-    
+
     const allData = Object.entries(dailyData)
       .map(([date, data]: [string, any]) => ({
         date: date, // Keep original date for 1Y, format others
         displayDate: formatDateForChart(new Date(date), chartPeriod),
         fullDate: new Date(date),
-        price: parseFloat(data['4. close']),
-        volume: parseInt(data['5. volume'])
+        price: parseFloat(data["4. close"]),
+        volume: parseInt(data["5. volume"]),
       }))
       .sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
-    
+
     // Get data based on selected period
     let daysBack: number;
-    
+
     switch (chartPeriod) {
-      case '1W':
+      case "1W":
         daysBack = 7;
         break;
-      case '1M':
+      case "1M":
         daysBack = 30;
         break;
-      case '1Y':
+      case "1Y":
         daysBack = 365;
         break;
       default:
         daysBack = 30;
     }
-    
+
     return allData.slice(-daysBack);
   };
 
   // Format dates appropriately for each chart period
-  const formatDateForChart = (date: Date, period: '1W' | '1M' | '1Y') => {
+  const formatDateForChart = (date: Date, period: "1W" | "1M" | "1Y") => {
     switch (period) {
-      case '1W':
+      case "1W":
         // Show day names for 1 week view
-        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      case '1M':
+        return date.toLocaleDateString("en-US", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        });
+      case "1M":
         // Show month/day for 1 month view
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      case '1Y':
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+      case "1Y":
         // Show month/year for 1 year view
-        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          year: "2-digit",
+        });
       default:
         return date.toLocaleDateString();
     }
@@ -235,16 +272,18 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
           <h1 className="text-4xl font-bold text-gray-900">
             {overview?.Name || symbol.toUpperCase()}
           </h1>
-          <span className="text-2xl font-semibold text-gray-600">({symbol.toUpperCase()})</span>
+          <span className="text-2xl font-semibold text-gray-600">
+            ({symbol.toUpperCase()})
+          </span>
         </div>
-        
+
         <div className="flex items-center justify-center gap-6 text-sm text-gray-600">
-          <span>{overview?.Sector || 'N/A'}</span>
+          <span>{overview?.Sector || "N/A"}</span>
           <span>•</span>
-          <span>{overview?.Industry || 'N/A'}</span>
+          <span>{overview?.Industry || "N/A"}</span>
           <span>•</span>
           <span className="text-2xl font-bold text-gray-900">
-            {formatCurrencyByContext(currentPrice, currencyCode, 'price')}
+            {formatCurrencyByContext(currentPrice, currencyCode, "price")}
           </span>
         </div>
       </div>
@@ -275,40 +314,46 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
       {/* Key Metrics Grid */}
       <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Key Financial Metrics</h2>
-        
+        <h2 className="text-2xl font-semibold text-gray-900">
+          Key Financial Metrics
+        </h2>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <MetricCard
             title="P/E Ratio"
-            value={formatNumber(overview?.PERatio, 'ratio')}
-            trend={parseFloat(overview?.PERatio) < 20 ? 'up' : 'down'}
+            value={formatNumber(overview?.PERatio, "ratio")}
+            trend={parseFloat(overview?.PERatio) < 20 ? "up" : "down"}
             isGood={false}
             comparison="S&P 500 Avg"
             comparisonValue="21.5"
           />
-          
+
           <MetricCard
             title="Return on Equity"
-            value={formatNumber(overview?.ReturnOnEquityTTM, 'percentage')}
-            trend={parseFloat(overview?.ReturnOnEquityTTM) > 0.10 ? 'up' : 'down'}
+            value={formatNumber(overview?.ReturnOnEquityTTM, "percentage")}
+            trend={
+              parseFloat(overview?.ReturnOnEquityTTM) > 0.1 ? "up" : "down"
+            }
             isGood={true}
             comparison="Industry Avg"
             comparisonValue="12%"
           />
-          
+
           <MetricCard
             title="Debt-to-Equity"
-            value={formatNumber(overview?.DebtToEquityRatio, 'ratio')}
-            trend={parseFloat(overview?.DebtToEquityRatio) < 0.5 ? 'up' : 'down'}
+            value={formatNumber(overview?.DebtToEquityRatio, "ratio")}
+            trend={
+              parseFloat(overview?.DebtToEquityRatio) < 0.5 ? "up" : "down"
+            }
             isGood={false}
             comparison="Industry Avg"
             comparisonValue="0.45"
           />
-          
+
           <MetricCard
             title="Price-to-Book"
-            value={formatNumber(overview?.PriceToBookRatio, 'ratio')}
-            trend={parseFloat(overview?.PriceToBookRatio) < 2 ? 'up' : 'down'}
+            value={formatNumber(overview?.PriceToBookRatio, "ratio")}
+            trend={parseFloat(overview?.PriceToBookRatio) < 2 ? "up" : "down"}
             isGood={false}
             comparison="Market Avg"
             comparisonValue="2.8"
@@ -318,56 +363,75 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
       {/* Professional Investment Analysis */}
       <div className="space-y-6">
-        <h2 className="text-2xl font-semibold text-gray-900">Investment Analysis</h2>
-        
+        <h2 className="text-2xl font-semibold text-gray-900">
+          Investment Analysis
+        </h2>
+
         <ProfessionalAnalysis symbol={symbol} />
       </div>
-
 
       {/* Additional Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Company Overview */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Company Overview</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Company Overview
+          </h3>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-600">Market Cap:</span>
-              <span className="font-medium">{formatNumber(overview?.MarketCapitalization, 'currency')}</span>
+              <span className="font-medium">
+                {formatNumber(overview?.MarketCapitalization, "currency")}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Revenue (TTM):</span>
-              <span className="font-medium">{formatNumber(overview?.RevenueTTM, 'currency')}</span>
+              <span className="font-medium">
+                {formatNumber(overview?.RevenueTTM, "currency")}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Gross Profit (TTM):</span>
-              <span className="font-medium">{formatNumber(overview?.GrossProfitTTM, 'currency')}</span>
+              <span className="font-medium">
+                {formatNumber(overview?.GrossProfitTTM, "currency")}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">EPS (TTM):</span>
-              <span className="font-medium">${formatNumber(overview?.EPS, 'number')}</span>
+              <span className="font-medium">
+                ${formatNumber(overview?.EPS, "number")}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Dividend Yield:</span>
-              <span className="font-medium">{formatNumber(overview?.DividendYield, 'percentage')}</span>
+              <span className="font-medium">
+                {formatNumber(overview?.DividendYield, "percentage")}
+              </span>
             </div>
           </div>
         </div>
 
         {/* Latest News & Sentiment */}
         <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Latest News & Market Sentiment</h3>
-          
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Latest News & Market Sentiment
+          </h3>
+
           {/* Market Sentiment Analysis */}
           {newsData?.sentiment && (
             <div className="mb-6">
               {(() => {
-                const sentConfig = sentimentConfig[newsData.sentiment.overall]
+                const sentConfig = sentimentConfig[newsData.sentiment.overall];
                 return (
-                  <div className={`p-4 rounded-lg border ${sentConfig.bgColor} ${sentConfig.borderColor} mb-4`}>
+                  <div
+                    className={`p-4 rounded-lg border ${sentConfig.bgColor} ${sentConfig.borderColor} mb-4`}
+                  >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xl">{sentConfig.icon}</span>
-                        <span className={`text-lg font-bold ${sentConfig.color}`}>
+                        <span
+                          className={`text-lg font-bold ${sentConfig.color}`}
+                        >
                           {sentConfig.label} Sentiment
                         </span>
                       </div>
@@ -378,21 +442,27 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-700">{newsData.sentiment.reasoning}</p>
+                    <p className="text-sm text-gray-700">
+                      {newsData.sentiment.reasoning}
+                    </p>
                     <div className="mt-2">
                       <div className="flex justify-between text-xs text-gray-500 mb-1">
                         <span>Confidence</span>
-                        <span>{(newsData.sentiment.confidence * 100).toFixed(0)}%</span>
+                        <span>
+                          {(newsData.sentiment.confidence * 100).toFixed(0)}%
+                        </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${newsData.sentiment.confidence * 100}%` }}
+                          style={{
+                            width: `${newsData.sentiment.confidence * 100}%`,
+                          }}
                         />
                       </div>
                     </div>
                   </div>
-                )
+                );
               })()}
             </div>
           )}
@@ -402,11 +472,14 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
             <h4 className="text-md font-medium text-gray-900 mb-3">
               Recent Headlines
             </h4>
-            
+
             {newsLoading ? (
               <div className="space-y-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="p-3 bg-gray-50 rounded-lg border animate-pulse">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="p-3 bg-gray-50 rounded-lg border animate-pulse"
+                  >
                     <div className="h-4 bg-gray-300 rounded w-3/4 mb-2"></div>
                     <div className="h-3 bg-gray-300 rounded w-1/2"></div>
                   </div>
@@ -415,7 +488,10 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
             ) : newsData?.news?.length ? (
               <div className="space-y-3">
                 {newsData.news.map((article, index) => (
-                  <div key={article.uuid || index} className="p-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all">
+                  <div
+                    key={article.uuid || index}
+                    className="p-3 bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-all"
+                  >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <h5 className="text-sm font-medium text-gray-900 leading-tight mb-2">
@@ -424,11 +500,13 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <Clock className="h-3 w-3" />
                           <span>
-                            {new Date(article.providerPublishTime * 1000).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
+                            {new Date(
+                              article.providerPublishTime * 1000,
+                            ).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
                             })}
                           </span>
                         </div>
@@ -448,7 +526,9 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
               </div>
             ) : (
               <div className="p-4 bg-gray-50 rounded-lg border text-center">
-                <p className="text-sm text-gray-500">No recent news available for this stock.</p>
+                <p className="text-sm text-gray-500">
+                  No recent news available for this stock.
+                </p>
               </div>
             )}
           </div>
@@ -457,8 +537,10 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
 
       {/* Personal Notes */}
       <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">My Investment Notes</h3>
-        
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          My Investment Notes
+        </h3>
+
         <textarea
           className="w-full h-32 p-3 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           placeholder="Record your research, thoughts, and investment rationale here..."
@@ -472,4 +554,4 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
       </div>
     </div>
   );
-} 
+}

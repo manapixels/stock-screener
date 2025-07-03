@@ -1,215 +1,293 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Search, TrendingUp } from 'lucide-react'
-import { searchStocks, addWatchlistItem, isAuthError } from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { toast } from 'sonner'
-import { useAuth } from '@/components/AuthProvider'
+import { useState, useEffect, useRef, useCallback } from "react";
+import { X, Search, TrendingUp } from "lucide-react";
+import { searchStocks, addWatchlistItem, isAuthError } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import { useAuth } from "@/components/AuthProvider";
 
 interface StockResult {
-  symbol: string
-  name: string
-  type: string
-  region: string
-  marketOpen: string
-  marketClose: string
-  timezone: string
-  currency: string
-  matchScore: string
+  symbol: string;
+  name: string;
+  type: string;
+  region: string;
+  marketOpen: string;
+  marketClose: string;
+  timezone: string;
+  currency: string;
+  matchScore: string;
 }
 
 // Function to determine correct market info from symbol
-function getMarketInfoFromSymbol(symbol: string): { region: string; currency: string } {
+function getMarketInfoFromSymbol(symbol: string): {
+  region: string;
+  currency: string;
+} {
   // Map suffixes to correct market info
   const marketMap: Record<string, { region: string; currency: string }> = {
-    '.SI': { region: 'Singapore', currency: 'SGD' },
-    '.L': { region: 'United Kingdom', currency: 'GBP' },
-    '.T': { region: 'Japan', currency: 'JPY' },
-    '.HK': { region: 'Hong Kong', currency: 'HKD' },
-    '.TO': { region: 'Canada', currency: 'CAD' },
-    '.AX': { region: 'Australia', currency: 'AUD' },
-    '.F': { region: 'Germany', currency: 'EUR' },
-    '.PA': { region: 'France', currency: 'EUR' },
-    '.BO': { region: 'India', currency: 'INR' },
-    '.SZ': { region: 'China', currency: 'CNY' },
-    '.KS': { region: 'South Korea', currency: 'KRW' }
-  }
-  
+    ".SI": { region: "Singapore", currency: "SGD" },
+    ".L": { region: "United Kingdom", currency: "GBP" },
+    ".T": { region: "Japan", currency: "JPY" },
+    ".HK": { region: "Hong Kong", currency: "HKD" },
+    ".TO": { region: "Canada", currency: "CAD" },
+    ".AX": { region: "Australia", currency: "AUD" },
+    ".F": { region: "Germany", currency: "EUR" },
+    ".PA": { region: "France", currency: "EUR" },
+    ".BO": { region: "India", currency: "INR" },
+    ".SZ": { region: "China", currency: "CNY" },
+    ".KS": { region: "South Korea", currency: "KRW" },
+  };
+
   // Check for suffix in symbol
   for (const [suffix, info] of Object.entries(marketMap)) {
     if (symbol.includes(suffix)) {
-      return info
+      return info;
     }
   }
-  
+
   // Default to US if no suffix found
-  return { region: 'United States', currency: 'USD' }
+  return { region: "United States", currency: "USD" };
 }
 
 interface Market {
-  code: string
-  name: string
-  country: string
-  flag: string
-  suffix: string
-  timezone: string
-  currency: string
+  code: string;
+  name: string;
+  country: string;
+  flag: string;
+  suffix: string;
+  timezone: string;
+  currency: string;
 }
 
 const MARKETS: Market[] = [
-  { code: 'ALL', name: 'All Markets', country: 'Global', flag: '🌍', suffix: '', timezone: 'Global', currency: 'Various' },
-  { code: 'US', name: 'US Exchanges', country: 'United States', flag: '🇺🇸', suffix: '', timezone: 'EST', currency: 'USD' },
-  { code: 'SGX', name: 'Singapore', country: 'Singapore', flag: '🇸🇬', suffix: '.SI', timezone: 'SGT', currency: 'SGD' },
-  { code: 'LSE', name: 'London', country: 'United Kingdom', flag: '🇬🇧', suffix: '.L', timezone: 'GMT', currency: 'GBP' },
-  { code: 'TSE', name: 'Tokyo', country: 'Japan', flag: '🇯🇵', suffix: '.T', timezone: 'JST', currency: 'JPY' },
-  { code: 'HKG', name: 'Hong Kong', country: 'Hong Kong', flag: '🇭🇰', suffix: '.HK', timezone: 'HKT', currency: 'HKD' },
-  { code: 'TSX', name: 'Toronto', country: 'Canada', flag: '🇨🇦', suffix: '.TO', timezone: 'EST', currency: 'CAD' },
-  { code: 'ASX', name: 'Australia', country: 'Australia', flag: '🇦🇺', suffix: '.AX', timezone: 'AEST', currency: 'AUD' }
-]
+  {
+    code: "ALL",
+    name: "All Markets",
+    country: "Global",
+    flag: "🌍",
+    suffix: "",
+    timezone: "Global",
+    currency: "Various",
+  },
+  {
+    code: "US",
+    name: "US Exchanges",
+    country: "United States",
+    flag: "🇺🇸",
+    suffix: "",
+    timezone: "EST",
+    currency: "USD",
+  },
+  {
+    code: "SGX",
+    name: "Singapore",
+    country: "Singapore",
+    flag: "🇸🇬",
+    suffix: ".SI",
+    timezone: "SGT",
+    currency: "SGD",
+  },
+  {
+    code: "LSE",
+    name: "London",
+    country: "United Kingdom",
+    flag: "🇬🇧",
+    suffix: ".L",
+    timezone: "GMT",
+    currency: "GBP",
+  },
+  {
+    code: "TSE",
+    name: "Tokyo",
+    country: "Japan",
+    flag: "🇯🇵",
+    suffix: ".T",
+    timezone: "JST",
+    currency: "JPY",
+  },
+  {
+    code: "HKG",
+    name: "Hong Kong",
+    country: "Hong Kong",
+    flag: "🇭🇰",
+    suffix: ".HK",
+    timezone: "HKT",
+    currency: "HKD",
+  },
+  {
+    code: "TSX",
+    name: "Toronto",
+    country: "Canada",
+    flag: "🇨🇦",
+    suffix: ".TO",
+    timezone: "EST",
+    currency: "CAD",
+  },
+  {
+    code: "ASX",
+    name: "Australia",
+    country: "Australia",
+    flag: "🇦🇺",
+    suffix: ".AX",
+    timezone: "AEST",
+    currency: "AUD",
+  },
+];
 
 interface SearchModalProps {
-  isOpen: boolean
-  onClose: () => void
-  onSelectStock?: (symbol: string, name: string) => void
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectStock?: (symbol: string, name: string) => void;
 }
 
-export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchModalProps) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<StockResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [selectedMarket, setSelectedMarket] = useState<Market>(MARKETS[0]) // Default to All Markets
-  const [showMarketDropdown, setShowMarketDropdown] = useState(false)
-  const { user } = useAuth()
-  const inputRef = useRef<HTMLInputElement>(null)
-  const marketRef = useRef<HTMLDivElement>(null)
+export default function SearchModal({
+  isOpen,
+  onClose,
+  onSelectStock,
+}: SearchModalProps) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<StockResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState<Market>(MARKETS[0]); // Default to All Markets
+  const [showMarketDropdown, setShowMarketDropdown] = useState(false);
+  const { user } = useAuth();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const marketRef = useRef<HTMLDivElement>(null);
 
   // Focus input when modal opens
   useEffect(() => {
     if (isOpen && inputRef.current) {
-      setTimeout(() => inputRef.current?.focus(), 100)
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
   // Clear search when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setQuery('')
-      setResults([])
-      setShowMarketDropdown(false)
+      setQuery("");
+      setResults([]);
+      setShowMarketDropdown(false);
     }
-  }, [isOpen])
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (marketRef.current && !marketRef.current.contains(event.target as Node)) {
-        setShowMarketDropdown(false)
+      if (
+        marketRef.current &&
+        !marketRef.current.contains(event.target as Node)
+      ) {
+        setShowMarketDropdown(false);
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Define handleSearch function first
   const handleSearch = useCallback(async () => {
-    if (!query.trim()) return
+    if (!query.trim()) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
       // Search by name/symbol without adding suffixes - let the API handle it
-      const data = await searchStocks(query)
-      let filteredResults = data.bestMatches || []
-      
+      const data = await searchStocks(query);
+      let filteredResults = data.bestMatches || [];
+
       // Filter results by selected market if not "All Markets"
-      if (selectedMarket.code !== 'ALL') {
-        if (selectedMarket.code === 'US') {
+      if (selectedMarket.code !== "ALL") {
+        if (selectedMarket.code === "US") {
           // For US, show stocks without suffixes or with US-specific patterns
-          filteredResults = filteredResults.filter((stock: StockResult) => 
-            !stock.symbol.includes('.') || 
-            stock.region.toLowerCase().includes('united states') ||
-            stock.region.toLowerCase().includes('nasdaq') ||
-            stock.region.toLowerCase().includes('nyse')
-          )
+          filteredResults = filteredResults.filter(
+            (stock: StockResult) =>
+              !stock.symbol.includes(".") ||
+              stock.region.toLowerCase().includes("united states") ||
+              stock.region.toLowerCase().includes("nasdaq") ||
+              stock.region.toLowerCase().includes("nyse"),
+          );
         } else {
           // For other markets, filter by suffix or region
-          filteredResults = filteredResults.filter((stock: StockResult) => 
-            stock.symbol.includes(selectedMarket.suffix) || 
-            stock.region.toLowerCase().includes(selectedMarket.country.toLowerCase())
-          )
+          filteredResults = filteredResults.filter(
+            (stock: StockResult) =>
+              stock.symbol.includes(selectedMarket.suffix) ||
+              stock.region
+                .toLowerCase()
+                .includes(selectedMarket.country.toLowerCase()),
+          );
         }
       }
-      
-      setResults(filteredResults)
+
+      setResults(filteredResults);
     } catch (error) {
-      console.error('Error searching stocks:', error)
-      toast.error('Failed to search stocks')
+      console.error("Error searching stocks:", error);
+      toast.error("Failed to search stocks");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [query, selectedMarket])
+  }, [query, selectedMarket]);
 
   // Handle search with debouncing (re-search when market changes)
   useEffect(() => {
     if (!query.trim()) {
-      setResults([])
-      return
+      setResults([]);
+      return;
     }
 
     const timeoutId = setTimeout(() => {
-      handleSearch()
-    }, 300) // Debounce 300ms
+      handleSearch();
+    }, 300); // Debounce 300ms
 
-    return () => clearTimeout(timeoutId)
-  }, [query, selectedMarket, handleSearch])
+    return () => clearTimeout(timeoutId);
+  }, [query, selectedMarket, handleSearch]);
 
   const handleAddToWatchlist = async (symbol: string, companyName: string) => {
     if (!user) {
-      toast.error('Please sign in to add stocks to your watchlist')
-      return
+      toast.error("Please sign in to add stocks to your watchlist");
+      return;
     }
 
     try {
-      const result = await addWatchlistItem(symbol, companyName)
+      const result = await addWatchlistItem(symbol, companyName);
       if (isAuthError(result)) {
-        toast.error('Please sign in to add stocks to your watchlist')
-        return
+        toast.error("Please sign in to add stocks to your watchlist");
+        return;
       }
-      toast.success(`${symbol} added to watchlist`)
+      toast.success(`${symbol} added to watchlist`);
     } catch (error) {
-      console.error('Error adding to watchlist:', error)
-      toast.error('Failed to add to watchlist')
+      console.error("Error adding to watchlist:", error);
+      toast.error("Failed to add to watchlist");
     }
-  }
+  };
 
   const handleSelectStock = (symbol: string, name: string) => {
     if (onSelectStock) {
-      onSelectStock(symbol, name)
+      onSelectStock(symbol, name);
     }
-    onClose()
-  }
+    onClose();
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose()
+    if (e.key === "Escape") {
+      onClose();
     }
-  }
+  };
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="flex min-h-full items-start justify-center p-4 pt-16 sm:pt-24">
-        <div 
+        <div
           className="relative w-full max-w-2xl rounded-lg bg-white shadow-xl transition-all"
           onKeyDown={handleKeyDown}
         >
@@ -217,7 +295,9 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 sm:px-6">
             <div className="flex items-center gap-2">
               <Search className="h-5 w-5 text-gray-500" />
-              <h3 className="text-lg font-semibold text-gray-900">Search Stocks</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                Search Stocks
+              </h3>
             </div>
             <button
               onClick={onClose}
@@ -245,7 +325,9 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
 
               {/* Compact Market Filter */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 font-medium">Market:</span>
+                <span className="text-sm text-gray-600 font-medium">
+                  Market:
+                </span>
                 <div className="relative" ref={marketRef}>
                   <button
                     onClick={() => setShowMarketDropdown(!showMarketDropdown)}
@@ -253,22 +335,34 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
                   >
                     <span className="text-sm">{selectedMarket.flag}</span>
                     <span>{selectedMarket.name}</span>
-                    <svg className={`h-3 w-3 text-gray-500 transition-transform ${showMarketDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    <svg
+                      className={`h-3 w-3 text-gray-500 transition-transform ${showMarketDropdown ? "rotate-180" : ""}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
                     </svg>
                   </button>
-                  
+
                   {showMarketDropdown && (
                     <div className="absolute z-10 left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg min-w-48">
                       {MARKETS.map((market) => (
                         <button
                           key={market.code}
                           onClick={() => {
-                            setSelectedMarket(market)
-                            setShowMarketDropdown(false)
+                            setSelectedMarket(market);
+                            setShowMarketDropdown(false);
                           }}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors first:rounded-t-lg last:rounded-b-lg ${
-                            selectedMarket.code === market.code ? 'bg-blue-50 text-blue-700' : ''
+                            selectedMarket.code === market.code
+                              ? "bg-blue-50 text-blue-700"
+                              : ""
                           }`}
                         >
                           <span className="text-sm">{market.flag}</span>
@@ -297,13 +391,15 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
                 <div className="space-y-2">
                   {results.map((stock) => {
                     // Get corrected market info based on symbol
-                    const correctedMarketInfo = getMarketInfoFromSymbol(stock.symbol)
-                    const displayRegion = correctedMarketInfo.region
-                    const displayCurrency = correctedMarketInfo.currency
-                    
+                    const correctedMarketInfo = getMarketInfoFromSymbol(
+                      stock.symbol,
+                    );
+                    const displayRegion = correctedMarketInfo.region;
+                    const displayCurrency = correctedMarketInfo.currency;
+
                     return (
-                      <div 
-                        key={stock.symbol} 
+                      <div
+                        key={stock.symbol}
                         className="rounded-lg border border-gray-200 p-4 hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -316,34 +412,40 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
                                 {stock.type}
                               </span>
                             </div>
-                            <p className="text-gray-800 font-medium mb-1">{stock.name}</p>
+                            <p className="text-gray-800 font-medium mb-1">
+                              {stock.name}
+                            </p>
                             <p className="text-sm text-gray-500">
                               {displayRegion} • {displayCurrency}
                             </p>
                           </div>
-                        
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <Button
-                            onClick={() => handleSelectStock(stock.symbol, stock.name)}
-                            variant="outline"
-                            size="sm"
-                            className="flex items-center gap-1"
-                          >
-                            <TrendingUp className="h-4 w-4" />
-                            Open
-                          </Button>
-                          {user && (
+
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <Button
-                              onClick={() => handleAddToWatchlist(stock.symbol, stock.name)}
+                              onClick={() =>
+                                handleSelectStock(stock.symbol, stock.name)
+                              }
+                              variant="outline"
                               size="sm"
+                              className="flex items-center gap-1"
                             >
-                              Add to Watchlist
+                              <TrendingUp className="h-4 w-4" />
+                              Open
                             </Button>
-                          )}
+                            {user && (
+                              <Button
+                                onClick={() =>
+                                  handleAddToWatchlist(stock.symbol, stock.name)
+                                }
+                                size="sm"
+                              >
+                                Add to Watchlist
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    )
+                    );
                   })}
                 </div>
               </div>
@@ -377,12 +479,13 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
           {!user && (
             <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
               <p className="text-sm text-gray-600">
-                <span className="font-medium">Tip:</span> Sign in to add stocks to your watchlist
+                <span className="font-medium">Tip:</span> Sign in to add stocks
+                to your watchlist
               </p>
             </div>
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }

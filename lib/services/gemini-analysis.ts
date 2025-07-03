@@ -1,83 +1,93 @@
-import { ProfessionalAnalysis, FinancialData, AnalysisResult, AnalysisError } from '../types/analysis'
-import { aggregateFinancialData } from './financial-data'
-import { analysisCache } from './analysis-cache'
+import {
+  ProfessionalAnalysis,
+  FinancialData,
+  AnalysisResult,
+  AnalysisError,
+} from "../types/analysis";
+import { aggregateFinancialData } from "./financial-data";
+import { analysisCache } from "./analysis-cache";
 
 /**
  * Generate professional analysis for a stock symbol
  * Checks cache first, then generates new analysis if needed
  */
-export async function generateProfessionalAnalysis(symbol: string): Promise<AnalysisResult | AnalysisError> {
+export async function generateProfessionalAnalysis(
+  symbol: string,
+): Promise<AnalysisResult | AnalysisError> {
   try {
-    console.log(`🚀 Starting analysis for ${symbol}...`)
+    console.log(`🚀 Starting analysis for ${symbol}...`);
 
     // Check cache first
-    const cached = analysisCache.get(symbol)
+    const cached = analysisCache.get(symbol);
     if (cached) {
-      console.log(`📦 Returning cached analysis for ${symbol}`)
-      return cached
+      console.log(`📦 Returning cached analysis for ${symbol}`);
+      return cached;
     }
 
     // Get financial data
-    const financialData = await aggregateFinancialData(symbol)
+    const financialData = await aggregateFinancialData(symbol);
     if (!financialData) {
-      throw new Error('Failed to fetch financial data')
+      throw new Error("Failed to fetch financial data");
     }
 
     // Generate analysis with Gemini
-    const analysis = await generateWithGemini(symbol, financialData)
-    
+    const analysis = await generateWithGemini(symbol, financialData);
+
     const result: AnalysisResult = {
       symbol,
       analysis,
       lastUpdated: new Date().toISOString(),
-      dataSource: 'Financial Modeling Prep + Gemini 2.5 Flash'
-    }
+      dataSource: "Financial Modeling Prep + Gemini 2.5 Flash",
+    };
 
     // Cache the result
-    analysisCache.set(symbol, result)
-    
-    console.log(`✅ Analysis completed for ${symbol}`)
-    return result
+    analysisCache.set(symbol, result);
+
+    console.log(`✅ Analysis completed for ${symbol}`);
+    return result;
   } catch (error) {
-    console.error(`❌ Error generating analysis for ${symbol}:`, error)
-    
+    console.error(`❌ Error generating analysis for ${symbol}:`, error);
+
     // Return error with fallback analysis
-    const fallbackAnalysis = generateFallbackAnalysis(symbol)
+    const fallbackAnalysis = generateFallbackAnalysis(symbol);
     const fallbackResult: AnalysisResult = {
       symbol,
       analysis: fallbackAnalysis,
       lastUpdated: new Date().toISOString(),
-      dataSource: 'Fallback Analysis'
-    }
+      dataSource: "Fallback Analysis",
+    };
 
     return {
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
-      details: 'Analysis generated using fallback method due to API failure',
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+      details: "Analysis generated using fallback method due to API failure",
       fallback: true,
-      ...fallbackResult
-    } as AnalysisError & AnalysisResult
+      ...fallbackResult,
+    } as AnalysisError & AnalysisResult;
   }
 }
 
 /**
  * Generate analysis using Gemini API
  */
-async function generateWithGemini(symbol: string, financialData: FinancialData): Promise<ProfessionalAnalysis> {
-  const geminiApiKey = process.env.GEMINI_API_KEY
-  
+async function generateWithGemini(
+  symbol: string,
+  financialData: FinancialData,
+): Promise<ProfessionalAnalysis> {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+
   if (!geminiApiKey) {
-    throw new Error('Gemini API key not configured')
+    throw new Error("Gemini API key not configured");
   }
 
-  const prompt = buildAnalysisPrompt(symbol, financialData)
-  
-  console.log('🤖 Calling Gemini API...')
-  
+  const prompt = buildAnalysisPrompt(symbol, financialData);
+
+  console.log("🤖 Calling Gemini API...");
+
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
@@ -85,36 +95,36 @@ async function generateWithGemini(symbol: string, financialData: FinancialData):
           topK: 40,
           topP: 0.8,
           maxOutputTokens: 2048,
-        }
-      })
-    }
-  )
+        },
+      }),
+    },
+  );
 
   if (!response.ok) {
-    const errorData = await response.text()
-    throw new Error(`Gemini API error: ${response.status} - ${errorData}`)
+    const errorData = await response.text();
+    throw new Error(`Gemini API error: ${response.status} - ${errorData}`);
   }
 
-  const data = await response.json()
-  const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text
+  const data = await response.json();
+  const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!analysisText) {
-    throw new Error('No analysis generated by Gemini')
+    throw new Error("No analysis generated by Gemini");
   }
 
-  return parseAnalysisResponse(analysisText)
+  return parseAnalysisResponse(analysisText);
 }
 
 /**
  * Build comprehensive analysis prompt for Gemini
  */
 function buildAnalysisPrompt(symbol: string, data: FinancialData): string {
-  const { profile, ratios, metrics, peers, quote } = data
-  
-  const isSingaporeStock = symbol.toUpperCase().endsWith('.SI')
-  const displaySymbol = symbol.toUpperCase()
-  const companyName = profile?.companyName || displaySymbol
-  
+  const { profile, ratios, metrics, peers, quote } = data;
+
+  const isSingaporeStock = symbol.toUpperCase().endsWith(".SI");
+  const displaySymbol = symbol.toUpperCase();
+  const companyName = profile?.companyName || displaySymbol;
+
   return `You are a senior equity research analyst at Goldman Sachs Asia. Generate a professional investment analysis for ${displaySymbol} (${companyName}) that matches the sophistication of top-tier investment bank research.
 
 IMPORTANT: Generate analysis in the same professional style as institutional research reports with specific metrics, peer comparisons, and forward-looking insights.
@@ -122,34 +132,43 @@ IMPORTANT: Generate analysis in the same professional style as institutional res
 COMPANY PROFILE:
 Company: ${companyName}
 Symbol: ${displaySymbol}
-Sector: ${profile?.sector || 'Financial Services'}
-Industry: ${profile?.industry || 'Banking'}
-Market Cap: ${profile?.mktCap ? '$' + (profile.mktCap / 1000000).toFixed(0) + 'M' : 'N/A'}
-${isSingaporeStock ? 'Market: Singapore Exchange (SGX)' : ''}
-Description: ${profile?.description?.substring(0, 400) || 'Regional banking and financial services provider'}
+Sector: ${profile?.sector || "Financial Services"}
+Industry: ${profile?.industry || "Banking"}
+Market Cap: ${profile?.mktCap ? "$" + (profile.mktCap / 1000000).toFixed(0) + "M" : "N/A"}
+${isSingaporeStock ? "Market: Singapore Exchange (SGX)" : ""}
+Description: ${profile?.description?.substring(0, 400) || "Regional banking and financial services provider"}
 
 CURRENT VALUATION:
-Price: ${quote?.price ? '$' + quote.price.toFixed(2) : 'N/A'}
-P/E Ratio: ${ratios?.priceEarningsRatio?.toFixed(1) || metrics?.peRatio?.toFixed(1) || 'N/A'}x
-P/B Ratio: ${ratios?.priceToBookRatio?.toFixed(1) || metrics?.pbRatio?.toFixed(1) || 'N/A'}x
-EV/EBITDA: ${metrics?.enterpriseValueOverEBITDA?.toFixed(1) || 'N/A'}x
+Price: ${quote?.price ? "$" + quote.price.toFixed(2) : "N/A"}
+P/E Ratio: ${ratios?.priceEarningsRatio?.toFixed(1) || metrics?.peRatio?.toFixed(1) || "N/A"}x
+P/B Ratio: ${ratios?.priceToBookRatio?.toFixed(1) || metrics?.pbRatio?.toFixed(1) || "N/A"}x
+EV/EBITDA: ${metrics?.enterpriseValueOverEBITDA?.toFixed(1) || "N/A"}x
 
 PROFITABILITY & EFFICIENCY:
-ROE: ${ratios?.returnOnEquity ? (ratios.returnOnEquity * 100).toFixed(1) + '%' : 'N/A'}
-ROA: ${ratios?.returnOnAssets ? (ratios.returnOnAssets * 100).toFixed(1) + '%' : 'N/A'}
-Operating Margin: ${ratios?.operatingProfitMargin ? (ratios.operatingProfitMargin * 100).toFixed(1) + '%' : 'N/A'}
+ROE: ${ratios?.returnOnEquity ? (ratios.returnOnEquity * 100).toFixed(1) + "%" : "N/A"}
+ROA: ${ratios?.returnOnAssets ? (ratios.returnOnAssets * 100).toFixed(1) + "%" : "N/A"}
+Operating Margin: ${ratios?.operatingProfitMargin ? (ratios.operatingProfitMargin * 100).toFixed(1) + "%" : "N/A"}
 
 FINANCIAL STRENGTH:
-Debt/Equity: ${ratios?.debtEquityRatio?.toFixed(2) || 'N/A'}
-Current Ratio: ${ratios?.currentRatio?.toFixed(2) || 'N/A'}
+Debt/Equity: ${ratios?.debtEquityRatio?.toFixed(2) || "N/A"}
+Current Ratio: ${ratios?.currentRatio?.toFixed(2) || "N/A"}
 
 GROWTH & RETURNS:
-Revenue Growth: ${metrics?.revenueGrowth ? (metrics.revenueGrowth * 100).toFixed(1) + '%' : 'N/A'}
-Earnings Growth: ${metrics?.netIncomeGrowth ? (metrics.netIncomeGrowth * 100).toFixed(1) + '%' : 'N/A'}
-Dividend Yield: ${quote?.dividendYield ? (quote.dividendYield * 100).toFixed(2) + '%' : 'N/A'}
+Revenue Growth: ${metrics?.revenueGrowth ? (metrics.revenueGrowth * 100).toFixed(1) + "%" : "N/A"}
+Earnings Growth: ${metrics?.netIncomeGrowth ? (metrics.netIncomeGrowth * 100).toFixed(1) + "%" : "N/A"}
+Dividend Yield: ${quote?.dividendYield ? (quote.dividendYield * 100).toFixed(2) + "%" : "N/A"}
 
 PEER COMPARISON:
-${peers && Array.isArray(peers) ? `Regional Peers: ${peers.slice(0, 5).map((p: { symbol?: string } | string) => typeof p === 'string' ? p : p.symbol || '').join(', ')}` : 'Peer data may be limited'}
+${
+  peers && Array.isArray(peers)
+    ? `Regional Peers: ${peers
+        .slice(0, 5)
+        .map((p: { symbol?: string } | string) =>
+          typeof p === "string" ? p : p.symbol || "",
+        )
+        .join(", ")}`
+    : "Peer data may be limited"
+}
 
 Format the response as clean JSON:
 
@@ -173,13 +192,13 @@ Format the response as clean JSON:
   },
   "recommendation": {
     "rating": "BUY",
-    "priceTarget": ${quote?.price ? (quote.price * (1 + Math.random() * 0.3 + 0.1)).toFixed(2) : '15.50'},
+    "priceTarget": ${quote?.price ? (quote.price * (1 + Math.random() * 0.3 + 0.1)).toFixed(2) : "15.50"},
     "timeHorizon": "12 months",
     "confidence": "HIGH"
   }
 }
 
-CRITICAL: Respond with ONLY the JSON object. No markdown, no explanations, just clean JSON.`
+CRITICAL: Respond with ONLY the JSON object. No markdown, no explanations, just clean JSON.`;
 }
 
 /**
@@ -188,38 +207,42 @@ CRITICAL: Respond with ONLY the JSON object. No markdown, no explanations, just 
 function parseAnalysisResponse(response: string): ProfessionalAnalysis {
   try {
     // Try multiple JSON extraction methods
-    let jsonStr = ''
-    
-    const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
+    let jsonStr = "";
+
+    const markdownMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
     if (markdownMatch) {
-      jsonStr = markdownMatch[1]
+      jsonStr = markdownMatch[1];
     } else {
-      const jsonMatch = response.match(/\{[\s\S]*\}/)
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        jsonStr = jsonMatch[0]
+        jsonStr = jsonMatch[0];
       } else {
-        const start = response.indexOf('{')
-        const end = response.lastIndexOf('}')
+        const start = response.indexOf("{");
+        const end = response.lastIndexOf("}");
         if (start !== -1 && end !== -1 && end > start) {
-          jsonStr = response.substring(start, end + 1)
+          jsonStr = response.substring(start, end + 1);
         }
       }
     }
-    
+
     if (!jsonStr) {
-      throw new Error('No JSON found in Gemini response')
+      throw new Error("No JSON found in Gemini response");
     }
-    
-    const parsed = JSON.parse(jsonStr)
-    
-    if (!parsed.investmentThesis || !parsed.bullishArguments || !parsed.bearishArguments) {
-      throw new Error('Invalid JSON structure - missing required fields')
+
+    const parsed = JSON.parse(jsonStr);
+
+    if (
+      !parsed.investmentThesis ||
+      !parsed.bullishArguments ||
+      !parsed.bearishArguments
+    ) {
+      throw new Error("Invalid JSON structure - missing required fields");
     }
-    
-    return parsed
+
+    return parsed;
   } catch (error) {
-    console.error('❌ Error parsing analysis response:', error)
-    throw new Error('Failed to parse Gemini analysis response')
+    console.error("❌ Error parsing analysis response:", error);
+    throw new Error("Failed to parse Gemini analysis response");
   }
 }
 
@@ -232,24 +255,24 @@ function generateFallbackAnalysis(symbol: string): ProfessionalAnalysis {
     bullishArguments: [
       "Market-established company with trading history",
       "Potential value opportunity pending detailed analysis",
-      "Listed security with regulatory oversight"
+      "Listed security with regulatory oversight",
     ],
     bearishArguments: [
       "Analysis unavailable due to technical issues",
       "Market volatility and uncertainty factors",
-      "Incomplete data constrains investment evaluation"
+      "Incomplete data constrains investment evaluation",
     ],
     financialHighlights: {
       valuation: "Analysis unavailable - please try again later",
       profitability: "Analysis unavailable - please try again later",
       financialStrength: "Analysis unavailable - please try again later",
-      dividend: "Analysis unavailable - please try again later"
+      dividend: "Analysis unavailable - please try again later",
     },
     recommendation: {
       rating: "HOLD",
       priceTarget: 0,
       timeHorizon: "12 months",
-      confidence: "LOW"
-    }
-  }
-} 
+      confidence: "LOW",
+    },
+  };
+}

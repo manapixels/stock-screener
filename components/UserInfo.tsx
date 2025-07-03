@@ -1,34 +1,38 @@
-'use client'
+"use client";
 
-import { useState, useRef, useEffect } from 'react'
-import { useAuth } from './AuthProvider'
-import { Button } from './ui/button'
-import { ChevronDown, Settings, LogOut } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useRef, useEffect } from "react";
+import { useAuth } from "./AuthProvider";
+import { Button } from "./ui/button";
+import { ChevronDown, Settings, LogOut } from "lucide-react";
+import Link from "next/link";
 
 export default function UserInfo() {
-  const { user, signOut } = useAuth()
-  const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const { user, signOut } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [])
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
-  if (!user) return null
+  if (!user) return null;
 
-  const displayName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'
-  const email = user.email
+  const displayName =
+    user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
+  const email = user.email;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -42,11 +46,15 @@ export default function UserInfo() {
             {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="hidden md:block text-left">
-            <div className="text-sm font-medium text-gray-900">{displayName}</div>
+            <div className="text-sm font-medium text-gray-900">
+              {displayName}
+            </div>
             <div className="text-xs text-gray-500">{email}</div>
           </div>
         </div>
-        <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          className={`h-4 w-4 text-gray-500 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </Button>
 
       {isOpen && (
@@ -55,9 +63,9 @@ export default function UserInfo() {
             <div className="font-medium text-gray-900">{displayName}</div>
             <div className="text-sm text-gray-500">{email}</div>
           </div>
-          
+
           <div className="py-1">
-            <Link 
+            <Link
               href="/settings"
               className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
               onClick={() => setIsOpen(false)}
@@ -65,11 +73,11 @@ export default function UserInfo() {
               <Settings className="h-4 w-4" />
               Settings
             </Link>
-            
+
             <button
               onClick={() => {
-                setIsOpen(false)
-                signOut()
+                setIsOpen(false);
+                signOut();
               }}
               className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
             >
@@ -80,5 +88,5 @@ export default function UserInfo() {
         </div>
       )}
     </div>
-  )
+  );
 }
