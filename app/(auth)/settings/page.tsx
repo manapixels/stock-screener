@@ -33,13 +33,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // Load user profile
-  useEffect(() => {
-    if (user) {
-      loadProfile()
-    }
-  }, [user, loadProfile])
-
+  // Define loadProfile function first
   const loadProfile = useCallback(async () => {
     try {
       setLoading(true)
@@ -77,6 +71,13 @@ export default function SettingsPage() {
       setLoading(false)
     }
   }, [user?.id, user?.email, user?.user_metadata?.full_name])
+
+  // Load user profile
+  useEffect(() => {
+    if (user) {
+      loadProfile()
+    }
+  }, [user, loadProfile])
 
   const generateLinkToken = async () => {
     try {
