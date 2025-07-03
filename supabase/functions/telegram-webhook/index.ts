@@ -72,6 +72,8 @@ const PROTECTED_COMMANDS = [
   "alert",
   "alerts",
   "watchlist",
+  "add",
+  "remove",
 ];
 
 // Authentication Functions
@@ -413,41 +415,77 @@ function formatHelpForTelegram(): string {
 • /search apple inc - Search for stocks
 • /recent - View recent research history
 
-🔗 *Account Features:*
-• /link TOKEN - Link your web account
-• /alerts - View your price alerts  
+📋 *Watchlist Management:*
 • /watchlist - View your watchlist
+• /add AAPL - Add stock to watchlist
+• /remove AAPL - Remove stock from watchlist
 
-🚨 *Alerts:*
+🚨 *Price Alerts:*
 • /alert AAPL 150 above - Set price alert
 • /alert TSLA 200 below - Set price alert
+• /alerts - View your active alerts
 
-ℹ️ *Help:*
+🔗 *Account Features:*
+• /link TOKEN - Link your web account
+• /signup - Create account with Telegram
+
+ℹ️ *Help & Info:*
 • /help - Show this message
 • /start - Welcome message
 
-🌐 *Get Started:*
+🌐 *Getting Started:*
 1. Try /research AAPL for instant analysis
-2. Use /search to find stocks
-3. Link your account for alerts & watchlist
+2. Use /add AAPL to build your watchlist
+3. Set /alert AAPL 150 above for notifications
+4. Link your account for full sync
 
 💡 *Pro Tips:*
 • Use inline buttons after analysis for quick actions
 • Research multiple stocks: /research AAPL MSFT GOOGL
+• Build watchlist first, then set alerts
 • Check /recent for your analysis history`;
 }
 
 function formatWatchlistForTelegram(watchlist: any[]): string {
   if (!watchlist || watchlist.length === 0) {
-    return "📋 *Your Watchlist*\n\n📭 Your watchlist is empty.\n\n💡 Add stocks through the web app or use /research to analyze stocks.";
+    return `📋 *Your Watchlist*
+
+📭 Your watchlist is empty.
+
+💡 **Get Started:**
+• /add AAPL - Add a stock to your watchlist
+• /research AAPL - Analyze a stock first
+• /search apple - Find stocks by name
+
+🚀 **Quick adds:**
+• /add AAPL - Apple Inc.
+• /add TSLA - Tesla Inc.
+• /add MSFT - Microsoft Corp.`;
   }
 
   const formatted = watchlist
-    .slice(0, 10)
-    .map((item, i) => `${i + 1}. *${item.symbol}* - ${item.name || "N/A"}`)
+    .slice(0, 15)
+    .map((item, i) => {
+      const symbol = item.symbol;
+      const name = item.company_name || "N/A";
+      const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : "";
+      
+      return `${i + 1}. *${symbol}* - ${name}${dateAdded ? ` (${dateAdded})` : ""}`;
+    })
     .join("\n");
 
-  return `📋 *Your Watchlist*\n\n${formatted}\n\n💡 Use /research [SYMBOL] to analyze any stock.`;
+  const totalCount = watchlist.length;
+  const showingText = totalCount > 15 ? `\n\n📊 Showing 15 of ${totalCount} stocks` : "";
+
+  return `📋 *Your Watchlist*
+
+${formatted}${showingText}
+
+💡 **Quick actions:**
+• /research SYMBOL - Analyze any stock
+• /add SYMBOL - Add new stock
+• /remove SYMBOL - Remove stock
+• /alert SYMBOL PRICE - Set price alert`;
 }
 
 function formatAlertConfirmationForTelegram(
@@ -587,6 +625,12 @@ serve(async (req: Request) => {
         break;
       case "watchlist":
         response = await handleWatchlistCommand(chatId, authenticatedUser!);
+        break;
+      case "add":
+        response = await handleAddCommand(chatId, command.symbol, authenticatedUser!);
+        break;
+      case "remove":
+        response = await handleRemoveCommand(chatId, command.symbol, authenticatedUser!);
         break;
       case "recent":
         response = formatRecentAnalyses();
@@ -1226,21 +1270,28 @@ async function handleWatchlistCommand(
   chatId: string,
   user: AuthenticatedUser,
 ): Promise<string> {
-  // Check if user is linked
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, telegram_chat_id")
-    .eq("telegram_chat_id", chatId)
-    .single();
+  try {
+    // Get user's watchlist
+    const { data: watchlist, error } = await supabase
+      .from("watchlist_items")
+      .select("id, symbol, company_name, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
-  if (!profile) {
+    if (error) {
+      console.error("Error fetching watchlist:", error);
+      return formatErrorForTelegram(
+        "Failed to fetch your watchlist. Please try again.",
+      );
+    }
+
+    return formatWatchlistForTelegram(watchlist || []);
+  } catch (error) {
+    console.error("Error handling watchlist command:", error);
     return formatErrorForTelegram(
-      "Please link your account first using /link [TOKEN]. Get a token from the web app settings.",
+      "An error occurred while fetching your watchlist. Please try again.",
     );
   }
-
-  // For now, return a placeholder since watchlist isn't fully implemented
-  return formatWatchlistForTelegram([]);
 }
 
 async function sendTelegramMessage(
@@ -1386,6 +1437,126 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
   }
 }
 
+async function handleAddCommand(
+  chatId: string,
+  symbol: string | undefined,
+  user: AuthenticatedUser,
+): Promise<string> {
+  if (!symbol) {
+    return formatErrorForTelegram(
+      "Please provide a stock symbol. Example: /add AAPL",
+      "add",
+      [
+        "Try /add AAPL",
+        "Use /search apple to find symbols",
+        "Check /recent for analyzed stocks",
+      ],
+    );
+  }
+
+  try {
+    // Check if already in watchlist
+    const { data: existing } = await supabase
+      .from("watchlist_items")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("symbol", symbol)
+      .single();
+
+    if (existing) {
+      return `⭐ *${symbol}* is already in your watchlist.\n\n💡 Use /watchlist to view your list or /remove ${symbol} to remove it.`;
+    }
+
+    // Try to validate the symbol by searching for it
+    const validatedSymbol = await validateOrSuggestSymbol(symbol);
+    if (!validatedSymbol) {
+      return formatErrorForTelegram(
+        `Stock symbol "${symbol}" not found.`,
+        "add",
+        [
+          `Try /search ${symbol} to find correct symbol`,
+          "Use /research SYMBOL to analyze first",
+          "Check symbol spelling",
+        ],
+      );
+    }
+
+    // Add to watchlist
+    const { error } = await supabase.from("watchlist_items").insert({
+      user_id: user.id,
+      symbol: symbol,
+      company_name: null, // Will be populated by the web app
+    });
+
+    if (error) {
+      console.error("Error adding to watchlist:", error);
+      return formatErrorForTelegram(
+        "Failed to add to watchlist. Please try again.",
+      );
+    }
+
+    return `⭐ *${symbol}* added to your watchlist!\n\n📱 **Quick actions:**\n• /research ${symbol} - Analyze this stock\n• /alert ${symbol} [PRICE] - Set price alert\n• /watchlist - View your full list\n• /remove ${symbol} - Remove from watchlist`;
+  } catch (error) {
+    console.error("Error handling add command:", error);
+    return formatErrorForTelegram(
+      "An error occurred while adding to watchlist. Please try again.",
+    );
+  }
+}
+
+async function handleRemoveCommand(
+  chatId: string,
+  symbol: string | undefined,
+  user: AuthenticatedUser,
+): Promise<string> {
+  if (!symbol) {
+    return formatErrorForTelegram(
+      "Please provide a stock symbol. Example: /remove AAPL",
+      "remove",
+      [
+        "Try /remove AAPL",
+        "Use /watchlist to see your stocks",
+        "Check symbol spelling",
+      ],
+    );
+  }
+
+  try {
+    // Check if exists in watchlist
+    const { data: existing } = await supabase
+      .from("watchlist_items")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("symbol", symbol)
+      .single();
+
+    if (!existing) {
+      return `📭 *${symbol}* is not in your watchlist.\n\n💡 Use /watchlist to see your stocks or /add ${symbol} to add it.`;
+    }
+
+    // Remove from watchlist
+    const { error } = await supabase
+      .from("watchlist_items")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("symbol", symbol);
+
+    if (error) {
+      console.error("Error removing from watchlist:", error);
+      return formatErrorForTelegram(
+        "Failed to remove from watchlist. Please try again.",
+      );
+    }
+
+    return `🗑️ *${symbol}* removed from your watchlist.\n\n📱 **Quick actions:**\n• /watchlist - View your updated list\n• /add ${symbol} - Add it back\n• /research ${symbol} - Analyze this stock`;
+  } catch (error) {
+    console.error("Error handling remove command:", error);
+    return formatErrorForTelegram(
+      "An error occurred while removing from watchlist. Please try again.",
+    );
+  }
+}
+
 async function handleWatchlistAdd(
   chatId: string,
   symbol: string,
@@ -1426,7 +1597,7 @@ async function handleWatchlistAdd(
     const { error } = await supabase.from("watchlist_items").insert({
       user_id: profile.id,
       symbol: symbol,
-      name: null, // Will be populated by the web app
+      company_name: null, // Will be populated by the web app
     });
 
     if (error) {
