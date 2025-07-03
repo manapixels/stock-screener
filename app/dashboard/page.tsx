@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AuthGuard from "@/components/AuthGuard";
 import Header from "@/components/Header";
@@ -9,7 +9,7 @@ import AlertsSidebar from "@/components/AlertsSidebar";
 import StockDetailClient from "@/components/StockDetailClient";
 import { TrendingUp, BarChart3 } from "lucide-react";
 
-export default function DashboardPage() {
+function DashboardContent() {
   const [selectedStock, setSelectedStock] = useState<{
     symbol: string;
     name: string;
@@ -116,5 +116,19 @@ export default function DashboardPage() {
         </main>
       </div>
     </AuthGuard>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }
