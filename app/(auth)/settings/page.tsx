@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -38,9 +38,9 @@ export default function SettingsPage() {
     if (user) {
       loadProfile()
     }
-  }, [user])
+  }, [user, loadProfile])
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -70,13 +70,13 @@ export default function SettingsPage() {
         if (createError) throw createError
         setProfile(newProfile)
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading profile:', error)
-      setError(error.message)
+      setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id, user?.email, user?.user_metadata?.full_name])
 
   const generateLinkToken = async () => {
     try {
@@ -87,7 +87,7 @@ export default function SettingsPage() {
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes from now
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('telegram_link_tokens')
         .insert({
           user_id: user?.id,
@@ -105,9 +105,9 @@ export default function SettingsPage() {
       })
       
       setSuccess('Link token generated! Use it in Telegram within 10 minutes.')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error generating link token:', error)
-      setError(error.message)
+      setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setSaving(false)
     }
@@ -130,9 +130,9 @@ export default function SettingsPage() {
       } else {
         throw new Error(data.error || 'Failed to unlink Telegram account')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error unlinking Telegram:', error)
-      setError(error.message)
+      setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setSaving(false)
     }
@@ -152,9 +152,9 @@ export default function SettingsPage() {
       
       setProfile(prev => prev ? { ...prev, ...updates } : null)
       setSuccess('Profile updated successfully!')
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error updating profile:', error)
-      setError(error.message)
+      setError(error instanceof Error ? error.message : 'Unknown error')
     } finally {
       setSaving(false)
     }

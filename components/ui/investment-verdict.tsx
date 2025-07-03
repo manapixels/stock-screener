@@ -1,5 +1,5 @@
 import { Target, TrendingUp, TrendingDown, Minus, DollarSign } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getCurrencyFromSymbol, formatCurrencyByContext } from '@/lib/currency-utils'
 
 interface PriceTargets {
@@ -269,7 +269,7 @@ export function InvestmentVerdict({
                   borderRadius: '8px',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
                 }}
-                formatter={(value: any, name: string) => [
+                formatter={(value: unknown) => [
                   `$${Number(value).toFixed(2)}`,
                   'Price'
                 ]}

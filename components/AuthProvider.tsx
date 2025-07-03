@@ -4,11 +4,22 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
+interface TelegramUser {
+  id: number
+  first_name: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+  auth_date: number
+  hash: string
+}
+
 interface AuthContextType {
   user: User | null
   loading: boolean
   signUp: (email: string, password: string) => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
+  signInWithTelegram: (telegramUser: TelegramUser) => Promise<void>
   signOut: () => Promise<void>
   clearSession: () => Promise<void>
 }
@@ -130,8 +141,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const signInWithTelegram = async (telegramUser: TelegramUser) => {
+    try {
+      // Call our API endpoint to validate Telegram auth and sign in/create user
+      const response = await fetch('/api/auth/telegram-signin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ telegramUser }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Telegram authentication failed')
+      }
+
+      const { redirectUrl } = await response.json()
+      
+      // Redirect to the magic link URL to complete authentication
+      if (redirectUrl) {
+        window.location.href = redirectUrl
+      } else {
+        throw new Error('No authentication URL received')
+      }
+      
+    } catch (error) {
+      console.error('Telegram signin error:', error)
+      throw error
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut, clearSession }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithTelegram, signOut, clearSession }}>
       {children}
     </AuthContext.Provider>
   )

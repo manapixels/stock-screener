@@ -59,8 +59,7 @@ export function formatCurrency(
     showCode = true,
     showSymbol = false,
     compact = false,
-    precision,
-    context = 'price'
+    precision
   } = options;
 
   // Parse amount

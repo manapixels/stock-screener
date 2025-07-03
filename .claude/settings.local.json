@@ -28,7 +28,11 @@
       "Bash(npm run dev:*)",
       "Bash(npx tsc:*)",
       "Bash(chmod:*)",
-      "Bash(supabase functions list:*)"
+      "Bash(supabase functions list:*)",
+      "Bash(npm run lint)",
+      "Bash(npx eslint:*)",
+      "Bash(timeout 30 npm run lint)",
+      "Bash(npx next lint:*)"
     ],
     "deny": []
   }

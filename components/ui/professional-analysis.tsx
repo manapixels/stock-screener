@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Target, DollarSign, Building2, AlertTriangle, CheckCircle, Clock, Sparkles } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { TrendingUp, TrendingDown, Target, Building2, AlertTriangle, CheckCircle, Clock, Sparkles } from 'lucide-react'
 import { getProfessionalAnalysis } from '@/lib/api'
 
 interface FinancialHighlights {
@@ -67,9 +67,9 @@ export function ProfessionalAnalysis({ symbol }: ProfessionalAnalysisProps) {
     if (symbol) {
       fetchAnalysis()
     }
-  }, [symbol])
+  }, [symbol, fetchAnalysis])
 
-  const fetchAnalysis = async () => {
+  const fetchAnalysis = useCallback(async () => {
     setLoading(true)
     setError(null)
     
@@ -82,7 +82,7 @@ export function ProfessionalAnalysis({ symbol }: ProfessionalAnalysisProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [symbol])
 
   if (loading) {
     return (

@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
-import { X, Search, TrendingUp, Globe } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, Search, TrendingUp } from 'lucide-react'
 import { searchStocks, addWatchlistItem, isAuthError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -125,9 +125,9 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
     }, 300) // Debounce 300ms
 
     return () => clearTimeout(timeoutId)
-  }, [query, selectedMarket])
+  }, [query, selectedMarket, handleSearch])
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     if (!query.trim()) return
 
     setLoading(true)
@@ -162,7 +162,7 @@ export default function SearchModal({ isOpen, onClose, onSelectStock }: SearchMo
     } finally {
       setLoading(false)
     }
-  }
+  }, [query, selectedMarket])
 
   const handleAddToWatchlist = async (symbol: string, companyName: string) => {
     if (!user) {

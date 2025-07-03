@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
-import { Bell, Plus, Settings, Eye } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { Bell, Plus, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import AlertList from '@/components/AlertList'
 import AlertModal from '@/components/AlertModal'

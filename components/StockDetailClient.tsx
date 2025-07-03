@@ -1,16 +1,12 @@
 "use client"
 
 import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Building2, TrendingUp, DollarSign, BarChart3, MessageSquare, PenTool, ExternalLink, Clock } from 'lucide-react';
+import { ExternalLink, Clock } from 'lucide-react';
 import { getStockDetails, getStockNote, saveStockNote, getStockNewsAndSentiment } from '@/lib/api';
 import { analyzeStock, formatNumber } from '@/lib/stock-analysis';
-import { getCurrencyFromSymbol, formatCurrencyByContext, formatPriceChange } from '@/lib/currency-utils';
+import { getCurrencyFromSymbol, formatCurrencyByContext } from '@/lib/currency-utils';
 import { MetricCard } from '@/components/ui/metric-card';
 import { ScoreGauge } from '@/components/ui/score-gauge';
-import { RecommendationBadge } from '@/components/ui/recommendation-badge';
-import { BullCase } from '@/components/ui/bull-case';
-import { BearCase } from '@/components/ui/bear-case';
 import { InvestmentVerdict } from '@/components/ui/investment-verdict';
 import { ProfessionalAnalysis } from '@/components/ui/professional-analysis';
 import { toast } from 'sonner';
@@ -191,7 +187,6 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
       .sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
     
     // Get data based on selected period
-    const now = new Date();
     let daysBack: number;
     
     switch (chartPeriod) {
@@ -228,54 +223,7 @@ export default function StockDetailClient({ symbol, onPriceUpdate }: StockDetail
     }
   };
 
-  // Get appropriate tick count for X-axis based on period
-  const getTickCount = () => {
-    switch (chartPeriod) {
-      case '1W':
-        return 7; // Show all days for 1 week
-      case '1M':
-        return 6; // Show ~5-6 ticks for 1 month
-      case '1Y':
-        return 12; // Show ~12 months for 1 year
-      default:
-        return 6;
-    }
-  };
-
-  // Custom tick formatter for 1Y that prevents duplicates
-  const formatYearTick = (value: string, index: number, ticks: any[]) => {
-    if (chartPeriod !== '1Y') return value;
-    
-    const date = new Date(value);
-    const monthYear = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    
-    // Check if this month-year combo has already been shown in previous ticks
-    const prevTicks = ticks.slice(0, index);
-    const alreadyShown = prevTicks.some(tick => {
-      const prevDate = new Date(tick.value);
-      const prevMonthYear = prevDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      return prevMonthYear === monthYear;
-    });
-    
-    return alreadyShown ? '' : monthYear;
-  };
-  
   const chartData = getChartData();
-  
-  // Calculate Y-axis domain for better vertical space usage
-  const getYAxisDomain = () => {
-    if (chartData.length === 0) return ['auto', 'auto'];
-    
-    const prices = chartData.map(d => d.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const padding = (maxPrice - minPrice) * 0.05; // 5% padding
-    
-    return [
-      Math.max(0, minPrice - padding).toFixed(2),
-      (maxPrice + padding).toFixed(2)
-    ];
-  };
 
   const { overview } = stockDetails;
 
