@@ -79,6 +79,12 @@ interface AnalysisData {
       financialStrength?: string;
       dividend?: string;
     };
+    competitorAnalysis?: {
+      marketPosition?: string;
+      competitiveAdvantages?: string;
+      threats?: string;
+      industryOutlook?: string;
+    };
   };
   currentPrice?: number;
   quote?: {
@@ -290,55 +296,67 @@ function formatAnalysisForTelegram(
     recommendation: rating,
   });
 
-  // Helper function to format arguments with bold titles
-  function formatArgument(arg: string, index: number): string {
+  // Helper function to format arguments with better structure
+  function formatArgument(arg: string): string {
     // Look for pattern "Title: Description" and make title bold
     const colonMatch = arg.match(/^([^:]+):\s*(.+)/);
     if (colonMatch) {
       const [, title, description] = colonMatch;
-      return `${index + 1}. *${title.trim()}:* ${description.trim()}`;
+      return `• *${title.trim()}:* ${description.trim()}`;
     }
-    return `${index + 1}. ${arg}`;
+    return `• ${arg}`;
   }
 
   // Generate related stocks suggestions
   const relatedSuggestions = getRelatedStockSuggestions(symbol);
 
   return `${cacheIndicator}📊 *${symbol} Professional Analysis*
+· · · · · · · · · · · · · · ·
 
-💭 *Investment Thesis:*
+💭 *Investment Thesis*
 ${data.investmentThesis || "Analysis in progress..."}
 
-${currentPrice ? `💰 *Current Price:* $${typeof currentPrice === "number" ? currentPrice.toFixed(2) : currentPrice}` : ""}
-${recEmoji} *Recommendation:* ${rating}
-${priceTarget ? `🎯 *Price Target:* $${priceTarget}` : ""}
-${confEmoji} *Confidence:* ${confidence} (${timeHorizon})
+· · · · · · · · · · · · · · ·
+💰 *Key Metrics*
+${currentPrice ? `• Current Price: \`$${typeof currentPrice === "number" ? currentPrice.toFixed(2) : currentPrice}\`` : ""}
+• Recommendation: *${rating}* ${recEmoji}
+${priceTarget ? `• Price Target: \`$${priceTarget}\`` : ""}
+• Confidence: ${confEmoji} *${confidence}* (${timeHorizon})
 
-📈 *Bull Case:*
+· · · · · · · · · · · · · · ·
+📈 *Bull Case*
 ${
   data.bullishArguments
     ?.slice(0, 3)
-    .map((arg: string, i: number) => formatArgument(arg, i))
-    .join("\n") || "Analyzing positive factors..."
+    .map((arg: string) => formatArgument(arg))
+    .join("\n") || "• Analyzing positive factors..."
 }
 
-📉 *Bear Case:*
+📉 *Bear Case*
 ${
   data.bearishArguments
-    ?.slice(0, 2)
-    .map((arg: string, i: number) => formatArgument(arg, i))
-    .join("\n") || "Analyzing risk factors..."
+    ?.slice(0, 3)
+    .map((arg: string) => formatArgument(arg))
+    .join("\n") || "• Analyzing risk factors..."
 }
 
-💰 *Financial Highlights:*
-📊 ${data.financialHighlights?.valuation || "Valuation metrics loading..."}
-💼 ${data.financialHighlights?.profitability || "Profitability analysis loading..."}
-🏦 ${data.financialHighlights?.financialStrength || "Financial strength assessment loading..."}
-💸 ${data.financialHighlights?.dividend || "Dividend analysis loading..."}
+· · · · · · · · · · · · · · ·
+🏆 *Competitive Analysis*
 
-${relatedSuggestions ? `💡 *Related:* ${relatedSuggestions}` : ""}
+🎯 *Market Position*
+${data.competitorAnalysis?.marketPosition || "Analyzing market position..."}
 
-🔍 Use /recent for research history or /help for commands.`;
+💪 *Key Advantages*
+${data.competitorAnalysis?.competitiveAdvantages || "Analyzing competitive advantages..."}
+
+⚠️ *Key Threats*
+${data.competitorAnalysis?.threats || "Analyzing competitive threats..."}
+
+🌐 *Industry Outlook*
+${data.competitorAnalysis?.industryOutlook || "Analyzing industry trends..."}
+
+· · · · · · · · · · · · · · ·
+${relatedSuggestions ? `💡 *Related Stocks:* ${relatedSuggestions}\n\n` : ""}🔍 Use /recent for research history • /help for commands`;
 }
 
 function getRelatedStockSuggestions(symbol: string): string {
@@ -889,55 +907,6 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
   return null;
 }
 
-async function parseWithAI(text: string): Promise<TelegramBotCommand | null> {
-  // This is an example of how you could integrate OpenAI for more sophisticated NLP
-  // Uncomment and configure when you want to use AI-powered parsing
-  
-  /*
-  const prompt = `
-Parse this user message into a stock bot command. Return JSON with:
-- command: "research" | "search" | "watchlist" | "add" | "remove" | "alert" | "help" | "menu"
-- symbol?: string (stock symbol if mentioned)
-- value?: number (price for alerts)
-- direction?: "above" | "below" (for alerts)
-- args: string[] (additional arguments)
-
-Examples:
-"analyze apple stock" → {"command": "research", "symbol": "AAPL", "args": ["AAPL"]}
-"add tesla to watchlist" → {"command": "add", "symbol": "TSLA", "args": ["TSLA"]}
-"alert me when nvidia goes above 500" → {"command": "alert", "symbol": "NVDA", "value": 500, "direction": "above", "args": ["NVDA", "500", "above"]}
-
-User message: "${text}"
-Respond with ONLY valid JSON:`;
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 150,
-        temperature: 0.1,
-      }),
-    });
-
-    const data = await response.json();
-    const result = JSON.parse(data.choices[0].message.content);
-    
-    return result;
-  } catch (error) {
-    console.error('AI parsing failed:', error);
-    return null;
-  }
-  */
-  
-  return null; // Disabled by default
-}
-
 async function handleStartCommand(chatId: string, from: TelegramUser): Promise<{ response: string; inlineKeyboard?: InlineKeyboard }> {
   const name = from.first_name || "there";
   
@@ -1204,7 +1173,7 @@ async function handleResearchCommand(
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ symbol }),
+        body: JSON.stringify({ symbol, chatId }),
       },
     );
 
@@ -1298,7 +1267,7 @@ async function handleMultipleResearch(
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ symbol }),
+          body: JSON.stringify({ symbol, chatId }),
         },
       );
 
@@ -1559,6 +1528,13 @@ async function sendTelegramMessage(
   try {
     console.log(`📤 Sending message to chat_id: ${chatId}, text length: ${text.length}`);
     
+    // Handle Telegram's 4096 character limit
+    if (text.length > 4096) {
+      console.warn(`⚠️ Message too long (${text.length} chars), splitting...`);
+      await sendLongMessage(chatId, text, replyMarkup);
+      return;
+    }
+    
     const body: any = {
       chat_id: chatId,
       text: text,
@@ -1590,6 +1566,14 @@ async function sendTelegramMessage(
       console.error("📋 Chat ID that failed:", chatId);
       console.error("📋 Bot token configured:", TELEGRAM_BOT_TOKEN ? "Yes" : "No");
       
+      // If message too long, try truncating
+      if (errorData.includes("message is too long")) {
+        console.log("🔄 Attempting to truncate message...");
+        const truncatedText = text.substring(0, 4000) + "\n\n...";
+        await sendTelegramMessage(chatId, truncatedText, replyMarkup);
+        return;
+      }
+      
       // If chat not found, this might be a test payload or invalid chat
       if (errorData.includes("chat not found")) {
         console.log("💡 This might be a test payload with invalid chat_id");
@@ -1599,6 +1583,36 @@ async function sendTelegramMessage(
     }
   } catch (error) {
     console.error("❌ Error sending Telegram message:", error);
+  }
+}
+
+async function sendLongMessage(chatId: string, text: string, replyMarkup?: any): Promise<void> {
+  // Split message into parts, preserving sections
+  const sections = text.split('\n\n');
+  let currentMessage = '';
+  let partNumber = 1;
+  
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i];
+    
+    // If adding this section would exceed limit, send current message
+    if (currentMessage.length + section.length + 2 > 3900) { // Leave some buffer
+      if (currentMessage) {
+        const footer = `\n\n📄 Part ${partNumber} of analysis...`;
+        await sendTelegramMessage(chatId, currentMessage + footer);
+        currentMessage = '';
+        partNumber++;
+        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between messages
+      }
+    }
+    
+    currentMessage += (currentMessage ? '\n\n' : '') + section;
+  }
+  
+  // Send remaining content with reply markup (only on last part)
+  if (currentMessage) {
+    const finalFooter = partNumber > 1 ? `\n\n📄 Part ${partNumber} (final)` : '';
+    await sendTelegramMessage(chatId, currentMessage + finalFooter, replyMarkup);
   }
 }
 

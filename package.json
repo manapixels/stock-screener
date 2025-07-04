@@ -6,23 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "check": "npm run lint && prettier --write . && tsc --noEmit",
-    "seed": "npx supabase db seed",
+    "check": "next lint && prettier --write . && tsc --noEmit",
     "deploy-telegram-webhook": "npx supabase functions deploy telegram-webhook --no-verify-jwt",
     "register-telegram-webhook": "node scripts/register-telegram-webhook.js register",
     "get-telegram-webhook-info": "node scripts/register-telegram-webhook.js info",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
-    "supabase:serve": "npx supabase functions serve",
     "supabase:status": "npx supabase status",
     "supabase:restart": "npm run supabase:stop && npm run supabase:start",
-    "supabase:db-reset": "npx supabase db reset",
-    "supabase:db-reset-all": "npm run supabase:db-reset && npm run supabase:generate-types",
-    "supabase:generate-types": "npx supabase gen types typescript --local --schema public > ./lib/types/definitions.ts",
-    "supabase:generate-migration": "npx supabase db diff | npx supabase migration new",
-    "supabase:push": "npx supabase push",
-    "supabase:pull": "npx supabase pull"
+    "supabase:db-reset": "npx supabase db reset && npm run supabase:generate-types",
+    "supabase:generate-types": "npx supabase gen types typescript --local --schema public > ./lib/types/definitions.ts"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
