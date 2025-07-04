@@ -619,7 +619,35 @@ serve(async (req: Request) => {
     }
 
     // Parse command
-    const command = parseCommand(text);
+    let command: TelegramBotCommand;
+    
+    if (text.startsWith('/')) {
+      // Traditional command parsing
+      command = parseCommand(text);
+    } else {
+      // Try natural language processing
+      const nlpCommand = parseNaturalLanguage(text);
+      if (nlpCommand) {
+        command = nlpCommand;
+        console.log("🧠 Parsed natural language:", { original: text, command: nlpCommand.command });
+      } else {
+        // If no pattern matches, suggest using menu or help
+        response = `🤔 I didn't understand that. Here are some ways to interact with me:
+
+📋 **Try saying:**
+• "Analyze Apple" or "Research AAPL"
+• "Search Tesla" or "Find Microsoft"
+• "Add NVDA to my watchlist"
+• "Show me my watchlist"
+• "Alert me when AAPL goes above $200"
+
+Or use the menu below:`;
+        inlineKeyboard = createMainMenuKeyboard(false);
+        await sendTelegramMessage(chatId, response, inlineKeyboard);
+        return new Response("OK", { status: 200 });
+      }
+    }
+    
     console.log("🔍 Parsed command:", command);
 
     // Check authentication for protected commands
@@ -649,7 +677,9 @@ serve(async (req: Request) => {
 
     switch (command.command) {
       case "start":
-        response = await handleStartCommand(chatId, message.from);
+        const startResult = await handleStartCommand(chatId, message.from);
+        response = startResult.response;
+        inlineKeyboard = startResult.inlineKeyboard;
         break;
       case "help":
         response = formatHelpForTelegram();
@@ -691,7 +721,11 @@ serve(async (req: Request) => {
         response = await handleAlertsCommand(chatId, authenticatedUser!);
         break;
       case "watchlist":
-        response = await handleWatchlistCommand(chatId, authenticatedUser!);
+        const watchlistUser = await authenticateUser(message.from.id, chatId);
+        if (!watchlistUser) {
+          return formatAuthenticationPrompt();
+        }
+        response = await handleWatchlistCommand(chatId, watchlistUser);
         break;
       case "add":
         response = await handleAddCommand(chatId, command.symbol, authenticatedUser!);
@@ -701,6 +735,11 @@ serve(async (req: Request) => {
         break;
       case "recent":
         response = formatRecentAnalyses();
+        break;
+      case "menu":
+        const menuResult = await handleMenuCommand(chatId, message.from);
+        response = menuResult.response;
+        inlineKeyboard = menuResult.inlineKeyboard;
         break;
       default:
         response = formatErrorForTelegram(
@@ -761,20 +800,165 @@ function parseCommand(text: string): TelegramBotCommand {
   };
 }
 
-async function handleStartCommand(chatId: string, from: any): Promise<string> {
+function parseNaturalLanguage(text: string): TelegramBotCommand | null {
+  const normalizedText = text.toLowerCase().trim();
+  
+  // Research/Analysis patterns
+  const researchPatterns = [
+    /(?:analyze|research|check|look up|tell me about|what about)\s+([A-Z]{1,5}|[a-zA-Z\s]+)/i,
+    /(?:how is|how's)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+stock|\s+doing)?/i,
+    /(?:price of|stock price for)\s+([A-Z]{1,5}|[a-zA-Z\s]+)/i,
+    /([A-Z]{2,5})\s+(?:analysis|research|report)/i
+  ];
+
+  for (const pattern of researchPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const symbol = match[1].trim().toUpperCase();
+      // If it looks like a symbol (2-5 chars, all caps), use it directly
+      if (/^[A-Z]{2,5}$/.test(symbol)) {
+        return { command: "research", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
+      }
+      // Otherwise treat as search query
+      return { command: "search", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [match[1].trim()] };
+    }
+  }
+
+  // Watchlist patterns
+  const watchlistPatterns = [
+    /(?:add|watch|track|follow)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+to my watchlist|\s+to watchlist)?/i,
+    /(?:watchlist|my stocks|my list)/i,
+    /(?:remove|delete|unwatch)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+from my watchlist|\s+from watchlist)?/i
+  ];
+
+  for (let i = 0; i < watchlistPatterns.length; i++) {
+    const match = text.match(watchlistPatterns[i]);
+    if (match) {
+      if (i === 0) { // Add pattern
+        const symbol = match[1].trim().toUpperCase();
+        return { command: "add", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
+      } else if (i === 1) { // View watchlist
+        return { command: "watchlist", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
+      } else if (i === 2) { // Remove pattern
+        const symbol = match[1].trim().toUpperCase();
+        return { command: "remove", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
+      }
+    }
+  }
+
+  // Search patterns
+  const searchPatterns = [
+    /(?:search|find|look for)\s+([a-zA-Z\s]+)/i,
+    /what is\s+([A-Z]{1,5})/i
+  ];
+
+  for (const pattern of searchPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return { command: "search", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [match[1].trim()] };
+    }
+  }
+
+  // Alert patterns
+  const alertPatterns = [
+    /(?:alert|notify|tell)\s+me\s+(?:when|if)\s+([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:goes|reaches|hits)\s+(?:above|over)\s+\$?(\d+(?:\.\d+)?)/i,
+    /(?:alert|notify|tell)\s+me\s+(?:when|if)\s+([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:goes|reaches|hits|falls)\s+(?:below|under)\s+\$?(\d+(?:\.\d+)?)/i,
+    /set\s+(?:alert|notification)\s+(?:for\s+)?([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:at\s+)?\$?(\d+(?:\.\d+)?)/i
+  ];
+
+  for (let i = 0; i < alertPatterns.length; i++) {
+    const match = text.match(alertPatterns[i]);
+    if (match) {
+      const symbol = match[1].trim().toUpperCase();
+      const price = parseFloat(match[2]);
+      const direction = i === 1 ? "below" : "above"; // Second pattern is for "below"
+      return { command: "alert", symbol, symbols: undefined, value: price, direction, args: [symbol, match[2], direction] };
+    }
+  }
+
+  // Help patterns
+  if (/(?:help|what can you do|commands|how to|guide)/i.test(normalizedText)) {
+    return { command: "help", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
+  }
+
+  // Show menu patterns
+  if (/(?:menu|options|main menu|show me)/i.test(normalizedText)) {
+    return { command: "menu", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
+  }
+
+  return null;
+}
+
+async function parseWithAI(text: string): Promise<TelegramBotCommand | null> {
+  // This is an example of how you could integrate OpenAI for more sophisticated NLP
+  // Uncomment and configure when you want to use AI-powered parsing
+  
+  /*
+  const prompt = `
+Parse this user message into a stock bot command. Return JSON with:
+- command: "research" | "search" | "watchlist" | "add" | "remove" | "alert" | "help" | "menu"
+- symbol?: string (stock symbol if mentioned)
+- value?: number (price for alerts)
+- direction?: "above" | "below" (for alerts)
+- args: string[] (additional arguments)
+
+Examples:
+"analyze apple stock" → {"command": "research", "symbol": "AAPL", "args": ["AAPL"]}
+"add tesla to watchlist" → {"command": "add", "symbol": "TSLA", "args": ["TSLA"]}
+"alert me when nvidia goes above 500" → {"command": "alert", "symbol": "NVDA", "value": 500, "direction": "above", "args": ["NVDA", "500", "above"]}
+
+User message: "${text}"
+Respond with ONLY valid JSON:`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 150,
+        temperature: 0.1,
+      }),
+    });
+
+    const data = await response.json();
+    const result = JSON.parse(data.choices[0].message.content);
+    
+    return result;
+  } catch (error) {
+    console.error('AI parsing failed:', error);
+    return null;
+  }
+  */
+  
+  return null; // Disabled by default
+}
+
+async function handleStartCommand(chatId: string, from: TelegramUser): Promise<{ response: string; inlineKeyboard?: InlineKeyboard }> {
   const name = from.first_name || "there";
+  
+  const response = `👋 Hello ${name}! Welcome to the Stock Screener Bot!
 
-  return `👋 Hello ${name}! Welcome to the Stock Screener Bot!
+🚀 **What can I do?**
+• Search and analyze stocks
+• Get professional research reports  
+• Track your watchlist
+• Set price alerts
 
-🔗 **Link Your Account:**
-If you have a web account, use /link [TOKEN] to connect your accounts.
+Choose an option below to get started:`;
 
-📊 **Get Started:**
-• /research AAPL - Analyze a stock
-• /search apple - Search for stocks  
-• /help - See all commands
+  // Check if user is authenticated to show appropriate menu
+  const authenticatedUser = await authenticateUser(from.id, chatId);
+  const isAuthenticated = !!authenticatedUser;
 
-🚀 Start exploring the markets with professional analysis!`;
+  return {
+    response,
+    inlineKeyboard: createMainMenuKeyboard(isAuthenticated)
+  };
 }
 
 async function handleSignupCommand(
@@ -946,7 +1130,8 @@ Use /help to see all available commands!`;
 async function handleResearchCommand(
   chatId: string,
   symbols: string[],
-  user: AuthenticatedUser,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _user: AuthenticatedUser,
 ): Promise<{ response: string; inlineKeyboard?: any }> {
   if (!symbols || symbols.length === 0) {
     return {
@@ -1472,6 +1657,9 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
         data,
         callbackQuery.from,
       );
+    } else if (data.startsWith("menu_")) {
+      // Handle menu navigation
+      response = await handleMenuCallbackQuery(chatId, data, callbackQuery.from);
     } else {
       response = "Unknown action. Please try again.";
     }
@@ -1700,4 +1888,134 @@ async function handleRelatedStocks(symbol: string): Promise<string> {
   }
 
   return `🔍 *Related to ${symbol}*\n\n${suggestions}\n\n💡 Use any /research command above for analysis.`;
+}
+
+function createMainMenuKeyboard(isAuthenticated: boolean): InlineKeyboard {
+  const keyboard = [
+    [
+      { text: "🔍 Search Stocks", callback_data: "menu_search" },
+      { text: "📊 Research Stock", callback_data: "menu_research" }
+    ]
+  ];
+
+  if (isAuthenticated) {
+    keyboard.push([
+      { text: "⭐ My Watchlist", callback_data: "menu_watchlist" },
+      { text: "🚨 My Alerts", callback_data: "menu_alerts" }
+    ]);
+    keyboard.push([
+      { text: "➕ Add to Watchlist", callback_data: "menu_add" },
+      { text: "🗑️ Remove from Watchlist", callback_data: "menu_remove" }
+    ]);
+    keyboard.push([
+      { text: "📈 Recent Analysis", callback_data: "menu_recent" }
+    ]);
+  } else {
+    keyboard.push([
+      { text: "🔗 Link Account", callback_data: "menu_link" },
+      { text: "📝 Sign Up", callback_data: "menu_signup" }
+    ]);
+  }
+
+  keyboard.push([
+    { text: "❓ Help", callback_data: "menu_help" }
+  ]);
+
+  return { inline_keyboard: keyboard };
+}
+
+function createAccountMenuKeyboard(): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [
+        { text: "🔗 Link Existing Account", callback_data: "auth_link_prompt" },
+        { text: "📝 Create New Account", callback_data: "auth_signup" }
+      ],
+      [
+        { text: "❓ What's the difference?", callback_data: "auth_explain" }
+      ],
+      [
+        { text: "⬅️ Back to Menu", callback_data: "menu_main" }
+      ]
+    ]
+  };
+}
+
+async function handleMenuCommand(
+  chatId: string,
+  from: any,
+): Promise<{ response: string; inlineKeyboard?: any }> {
+  // Check if user is authenticated
+  const authenticatedUser = await authenticateUser(from.id, chatId);
+  const isAuthenticated = !!authenticatedUser;
+  
+  const response = isAuthenticated 
+    ? `👋 Welcome back, ${authenticatedUser.display_name || from.first_name}!\n\nChoose what you'd like to do:`
+    : `👋 Welcome ${from.first_name}!\n\nChoose what you'd like to do:`;
+
+  return {
+    response,
+    inlineKeyboard: createMainMenuKeyboard(isAuthenticated)
+  };
+}
+
+async function handleMenuCallbackQuery(
+  chatId: string,
+  data: string,
+  from: any,
+): Promise<string> {
+  const action = data.replace("menu_", "");
+  
+  switch (action) {
+    case "main":
+      const menuResult = await handleMenuCommand(chatId, from);
+      await sendTelegramMessage(chatId, menuResult.response, menuResult.inlineKeyboard);
+      return "🏠 Main menu";
+      
+    case "search":
+      return "🔍 **Stock Search**\n\nType: `/search [company name or symbol]`\n\nExamples:\n• `/search Apple`\n• `/search AAPL`\n• `/search Tesla`";
+      
+    case "research":
+      return "📊 **Stock Research**\n\nType: `/research [SYMBOL]`\n\nExamples:\n• `/research AAPL`\n• `/research TSLA`\n• `/research GOOGL`\n\n💡 Requires account - use /signup or /link";
+      
+    case "watchlist":
+      const watchlistUser = await authenticateUser(from.id, chatId);
+      if (!watchlistUser) {
+        return formatAuthenticationPrompt();
+      }
+      return await handleWatchlistCommand(chatId, watchlistUser);
+      
+    case "alerts":
+      const alertUser = await authenticateUser(from.id, chatId);
+      if (!alertUser) {
+        return formatAuthenticationPrompt();
+      }
+      return await handleAlertsCommand(chatId, alertUser);
+      
+    case "add":
+      return "➕ **Add to Watchlist**\n\nType: `/add [SYMBOL]`\n\nExamples:\n• `/add AAPL`\n• `/add TSLA`\n\n💡 Requires account - use /signup or /link";
+      
+    case "remove":
+      return "🗑️ **Remove from Watchlist**\n\nType: `/remove [SYMBOL]`\n\nExamples:\n• `/remove AAPL`\n• `/remove TSLA`\n\n💡 Requires account - use /signup or /link";
+      
+    case "recent":
+      return formatRecentAnalyses();
+      
+    case "link":
+      return "🔗 **Link Your Account**\n\nIf you have a web account:\n1. Go to your account settings\n2. Generate a link token\n3. Type: `/link [TOKEN]`\n\nExample: `/link abc123def456`";
+      
+    case "signup":
+      const signupResult = await handleSignupCommand(chatId, from);
+      if (signupResult.inlineKeyboard) {
+        await sendTelegramMessage(chatId, signupResult.response, signupResult.inlineKeyboard);
+        return "📝 Account creation";
+      }
+      return signupResult.response;
+      
+    case "help":
+      return formatHelpForTelegram();
+      
+    default:
+      return "Unknown menu action. Please try again.";
+  }
 }
