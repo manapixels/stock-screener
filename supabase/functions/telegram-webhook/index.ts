@@ -1335,6 +1335,37 @@ async function validateOrSuggestSymbol(symbol: string): Promise<string | null> {
   return null;
 }
 
+// Helper function to get company name for a symbol
+async function getCompanyName(symbol: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/yahoo-stock-search`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: symbol }),
+      },
+    );
+
+    if (response.ok) {
+      const results = await response.json();
+      if (results.quotes && results.quotes.length > 0) {
+        // Find exact match or first result
+        const exactMatch = results.quotes.find((q: any) => q.symbol === symbol);
+        const targetQuote = exactMatch || results.quotes[0];
+        
+        return targetQuote.longName || targetQuote.shortName || symbol;
+      }
+    }
+  } catch (error) {
+    console.error("Error getting company name:", error);
+  }
+
+  return symbol; // Fallback to symbol if we can't get company name
+}
+
 async function handleSearchCommand(query: string): Promise<string> {
   if (!query || query.trim().length === 0) {
     return formatErrorForTelegram(
@@ -1759,11 +1790,20 @@ async function handleAddCommand(
       );
     }
 
+    // Get company name for the symbol
+    const companyName = await getCompanyName(symbol);
+    if (!companyName) {
+      return formatErrorForTelegram(
+        `Unable to get company information for "${symbol}". Please try again.`,
+        "add",
+      );
+    }
+
     // Add to watchlist
     const { error } = await supabase.from("watchlist_items").insert({
       user_id: user.id,
       symbol: symbol,
-      company_name: null, // Will be populated by the web app
+      company_name: companyName,
     });
 
     if (error) {
@@ -1871,11 +1911,19 @@ async function handleWatchlistAdd(
       return `⭐ *${symbol}* is already in your watchlist.\n\n💡 View your watchlist in the web app or use /watchlist command.`;
     }
 
+    // Get company name for the symbol
+    const companyName = await getCompanyName(symbol);
+    if (!companyName) {
+      return formatErrorForTelegram(
+        `Unable to get company information for "${symbol}". Please try again.`,
+      );
+    }
+
     // Add to watchlist
     const { error } = await supabase.from("watchlist_items").insert({
       user_id: profile.id,
       symbol: symbol,
-      company_name: null, // Will be populated by the web app
+      company_name: companyName,
     });
 
     if (error) {
