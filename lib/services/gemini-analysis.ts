@@ -90,63 +90,75 @@ async function generateWithGemini(
         safetySettings: [
           {
             category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE"
+            threshold: "BLOCK_NONE",
           },
           {
-            category: "HARM_CATEGORY_HATE_SPEECH", 
-            threshold: "BLOCK_NONE"
+            category: "HARM_CATEGORY_HATE_SPEECH",
+            threshold: "BLOCK_NONE",
           },
           {
             category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_NONE"
+            threshold: "BLOCK_NONE",
           },
           {
             category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_NONE"
-          }
-        ]
+            threshold: "BLOCK_NONE",
+          },
+        ],
       }),
     },
   );
 
   if (!response.ok) {
     const errorData = await response.text();
-    console.error(
-      `Gemini API error: ${response.status} - ${errorData}`,
-    );
+    console.error(`Gemini API error: ${response.status} - ${errorData}`);
     throw new Error(`Gemini API error: ${response.status} - ${errorData}`);
   }
 
   const data = await response.json();
-  
+
   // Enhanced debugging
   console.log(`Gemini API response structure:`, {
     hasCandidates: !!data.candidates,
     candidatesLength: data.candidates?.length || 0,
-    firstCandidate: data.candidates?.[0] ? {
-      hasContent: !!data.candidates[0].content,
-      hasParts: !!data.candidates[0].content?.parts,
-      partsLength: data.candidates[0].content?.parts?.length || 0,
-      finishReason: data.candidates[0].finishReason,
-      safetyRatings: data.candidates[0].safetyRatings
-    } : null
+    firstCandidate: data.candidates?.[0]
+      ? {
+          hasContent: !!data.candidates[0].content,
+          hasParts: !!data.candidates[0].content?.parts,
+          partsLength: data.candidates[0].content?.parts?.length || 0,
+          finishReason: data.candidates[0].finishReason,
+          safetyRatings: data.candidates[0].safetyRatings,
+        }
+      : null,
   });
 
   // Check for safety filter blocks
   if (data.candidates?.[0]?.finishReason === "SAFETY") {
-    console.error(`Content blocked by Gemini safety filters:`, data.candidates[0].safetyRatings);
-    throw new Error("Content blocked by Gemini safety filters. Using fallback analysis.");
+    console.error(
+      `Content blocked by Gemini safety filters:`,
+      data.candidates[0].safetyRatings,
+    );
+    throw new Error(
+      "Content blocked by Gemini safety filters. Using fallback analysis.",
+    );
   }
 
   // Check for token limit exceeded
   if (data.candidates?.[0]?.finishReason === "MAX_TOKENS") {
     console.error(`Gemini hit token limit. Response was truncated.`);
-    throw new Error("Response truncated due to token limit. Using fallback analysis.");
+    throw new Error(
+      "Response truncated due to token limit. Using fallback analysis.",
+    );
   }
 
   // Check for other finish reasons
-  if (data.candidates?.[0]?.finishReason && data.candidates[0].finishReason !== "STOP") {
-    console.warn(`Gemini finished with reason: ${data.candidates[0].finishReason}`);
+  if (
+    data.candidates?.[0]?.finishReason &&
+    data.candidates[0].finishReason !== "STOP"
+  ) {
+    console.warn(
+      `Gemini finished with reason: ${data.candidates[0].finishReason}`,
+    );
   }
 
   const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -224,7 +236,10 @@ function parseAnalysisResponse(response: string): ProfessionalAnalysis {
     }
     throw new Error("No JSON found in response");
   } catch (error) {
-    console.error("Error parsing Gemini response:", error.message);
+    console.error(
+      "Error parsing Gemini response:",
+      error instanceof Error ? error.message : String(error),
+    );
     console.log("Raw Gemini response:", response);
     throw new Error("Failed to parse analysis response");
   }
@@ -255,18 +270,20 @@ function generateFallbackAnalysis(symbol: string): ProfessionalAnalysis {
         "Dividend policy subject to earnings volatility and regulatory requirements",
     },
     competitorAnalysis: {
-      marketPosition: "Mid-tier player in competitive landscape with regional focus and established customer relationships",
+      marketPosition:
+        "Mid-tier player in competitive landscape with regional focus and established customer relationships",
       competitiveAdvantages: [
-        "Local market knowledge and customer relationships", 
+        "Local market knowledge and customer relationships",
         "Regulatory compliance expertise and established operations",
-        "Digital banking capabilities and technology infrastructure"
+        "Digital banking capabilities and technology infrastructure",
       ],
       threats: [
         "Larger competitors with greater scale and resources",
-        "Fintech disruption in traditional banking services", 
-        "Economic downturns affecting loan portfolio quality"
+        "Fintech disruption in traditional banking services",
+        "Economic downturns affecting loan portfolio quality",
       ],
-      industryOutlook: "Financial services sector facing transformation with digital disruption and regulatory changes creating both opportunities and challenges"
+      industryOutlook:
+        "Financial services sector facing transformation with digital disruption and regulatory changes creating both opportunities and challenges",
     },
     recommendation: {
       rating: "HOLD",

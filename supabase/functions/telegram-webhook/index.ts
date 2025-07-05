@@ -95,10 +95,12 @@ interface AnalysisData {
 }
 
 interface InlineKeyboard {
-  inline_keyboard: Array<Array<{
-    text: string;
-    callback_data: string;
-  }>>;
+  inline_keyboard: Array<
+    Array<{
+      text: string;
+      callback_data: string;
+    }>
+  >;
 }
 
 interface WatchlistItem {
@@ -347,10 +349,26 @@ ${
 ${data.competitorAnalysis?.marketPosition || "Analyzing market position..."}
 
 💪 *Key Advantages*
-${data.competitorAnalysis?.competitiveAdvantages || "Analyzing competitive advantages..."}
+${
+  data.competitorAnalysis?.competitiveAdvantages
+    ? Array.isArray(data.competitorAnalysis.competitiveAdvantages)
+      ? data.competitorAnalysis.competitiveAdvantages
+          .map((adv) => `• ${adv}`)
+          .join("\n")
+      : data.competitorAnalysis.competitiveAdvantages
+    : "Analyzing competitive advantages..."
+}
 
 ⚠️ *Key Threats*
-${data.competitorAnalysis?.threats || "Analyzing competitive threats..."}
+${
+  data.competitorAnalysis?.threats
+    ? Array.isArray(data.competitorAnalysis.threats)
+      ? data.competitorAnalysis.threats
+          .map((threat) => `• ${threat}`)
+          .join("\n")
+      : data.competitorAnalysis.threats
+    : "Analyzing competitive threats..."
+}
 
 🌐 *Industry Outlook*
 ${data.competitorAnalysis?.industryOutlook || "Analyzing industry trends..."}
@@ -518,7 +536,10 @@ function formatHelpForTelegram(): string {
 • Check /recent for your analysis history`;
 }
 
-function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlineKeyboard?: InlineKeyboard } {
+function formatWatchlistForTelegram(watchlist: any[]): {
+  response: string;
+  inlineKeyboard?: InlineKeyboard;
+} {
   if (!watchlist || watchlist.length === 0) {
     return {
       response: `📋 *Your Watchlist*
@@ -542,16 +563,20 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
     .map((item) => {
       const symbol = item.symbol;
       const name = item.company_name || "N/A";
-      
+
       // Format price data
       let priceInfo = "";
       let performanceEmoji = "";
-      
-      if (item.priceData && typeof item.priceData.price === 'number' && item.priceData.price > 0) {
+
+      if (
+        item.priceData &&
+        typeof item.priceData.price === "number" &&
+        item.priceData.price > 0
+      ) {
         const price = item.priceData.price;
         const change = item.priceData.change || 0;
         const changePercent = item.priceData.changePercent || 0;
-        
+
         // Performance emoji based on change
         if (changePercent > 0.5) {
           performanceEmoji = "📈";
@@ -560,17 +585,22 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
         } else {
           performanceEmoji = "➡️";
         }
-        
+
         const changeSign = change >= 0 ? "+" : "";
         priceInfo = `\n$${price.toFixed(2)} (${changeSign}${changePercent.toFixed(1)}% today) ${performanceEmoji}`;
       } else {
         console.log(`❌ Price data for ${symbol}:`, item.priceData);
         priceInfo = "\nPrice unavailable";
       }
-      
+
       // Use company name from price data if available, otherwise use stored name
-      const displayName = (item.priceData && item.priceData.name) ? item.priceData.name : (name !== symbol ? name : "N/A");
-      
+      const displayName =
+        item.priceData && item.priceData.name
+          ? item.priceData.name
+          : name !== symbol
+            ? name
+            : "N/A";
+
       // Format alert status
       let alertInfo = "";
       if (item.alerts && item.alerts.length > 0) {
@@ -579,13 +609,14 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
       } else {
         alertInfo = "\nNo alerts set";
       }
-      
+
       return `*${symbol}* - ${displayName}${priceInfo}${alertInfo}`;
     })
     .join("\n\n");
 
   const totalCount = watchlist.length;
-  const showingText = totalCount > 15 ? `\n\n📊 Showing 15 of ${totalCount} stocks` : "";
+  const showingText =
+    totalCount > 15 ? `\n\n📊 Showing 15 of ${totalCount} stocks` : "";
 
   // Create inline keyboard with action buttons
   const inlineKeyboard: InlineKeyboard = {
@@ -593,7 +624,7 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
       [
         { text: "➕ Add", callback_data: "watchlist_add_new" },
         { text: "🔄 Refresh", callback_data: "watchlist_refresh" },
-      ]
+      ],
     ],
   };
 
@@ -629,7 +660,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 serve(async (req: Request) => {
   console.log("📱 Webhook request received:", req.method);
-  
+
   // Validate environment variables first
   if (!TELEGRAM_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("❌ Missing required environment variables");
@@ -674,7 +705,7 @@ serve(async (req: Request) => {
     const message = payload.message;
     const chatId = message.chat.id.toString();
     const text = message.text.trim();
-    
+
     // Validate chat ID format (should be a valid number)
     if (!/^-?\d+$/.test(chatId)) {
       console.error(`❌ Invalid chat ID format: ${chatId}`);
@@ -683,8 +714,8 @@ serve(async (req: Request) => {
 
     // Parse command
     let command: TelegramBotCommand;
-    
-    if (text.startsWith('/')) {
+
+    if (text.startsWith("/")) {
       // Traditional command parsing
       command = parseCommand(text);
     } else {
@@ -692,7 +723,10 @@ serve(async (req: Request) => {
       const nlpCommand = parseNaturalLanguage(text);
       if (nlpCommand) {
         command = nlpCommand;
-        console.log("🧠 Parsed natural language:", { original: text, command: nlpCommand.command });
+        console.log("🧠 Parsed natural language:", {
+          original: text,
+          command: nlpCommand.command,
+        });
       } else {
         // If no pattern matches, suggest using menu or help
         response = `🤔 I didn't understand that. Here are some ways to interact with me:
@@ -710,7 +744,7 @@ Or use the menu below:`;
         return new Response("OK", { status: 200 });
       }
     }
-    
+
     console.log("🔍 Parsed command:", command);
 
     // Check authentication for protected commands
@@ -793,15 +827,26 @@ Or use the menu below:`;
           );
           return new Response("OK", { status: 200 });
         }
-        const watchlistResult = await handleWatchlistCommand(chatId, watchlistUser);
+        const watchlistResult = await handleWatchlistCommand(
+          chatId,
+          watchlistUser,
+        );
         response = watchlistResult.response;
         inlineKeyboard = watchlistResult.inlineKeyboard;
         break;
       case "add":
-        response = await handleAddCommand(chatId, command.symbol, authenticatedUser!);
+        response = await handleAddCommand(
+          chatId,
+          command.symbol,
+          authenticatedUser!,
+        );
         break;
       case "remove":
-        response = await handleRemoveCommand(chatId, command.symbol, authenticatedUser!);
+        response = await handleRemoveCommand(
+          chatId,
+          command.symbol,
+          authenticatedUser!,
+        );
         break;
       case "recent":
         response = formatRecentAnalyses();
@@ -872,13 +917,13 @@ function parseCommand(text: string): TelegramBotCommand {
 
 function parseNaturalLanguage(text: string): TelegramBotCommand | null {
   const normalizedText = text.toLowerCase().trim();
-  
+
   // Research/Analysis patterns
   const researchPatterns = [
     /(?:analyze|research|check|look up|tell me about|what about)\s+([A-Z]{1,5}|[a-zA-Z\s]+)/i,
     /(?:how is|how's)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+stock|\s+doing)?/i,
     /(?:price of|stock price for)\s+([A-Z]{1,5}|[a-zA-Z\s]+)/i,
-    /([A-Z]{2,5})\s+(?:analysis|research|report)/i
+    /([A-Z]{2,5})\s+(?:analysis|research|report)/i,
   ];
 
   for (const pattern of researchPatterns) {
@@ -887,10 +932,24 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
       const symbol = match[1].trim().toUpperCase();
       // If it looks like a symbol (2-5 chars, all caps), use it directly
       if (/^[A-Z]{2,5}$/.test(symbol)) {
-        return { command: "research", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
+        return {
+          command: "research",
+          symbol,
+          symbols: undefined,
+          value: undefined,
+          direction: "above",
+          args: [symbol],
+        };
       }
       // Otherwise treat as search query
-      return { command: "search", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [match[1].trim()] };
+      return {
+        command: "search",
+        symbol: undefined,
+        symbols: undefined,
+        value: undefined,
+        direction: "above",
+        args: [match[1].trim()],
+      };
     }
   }
 
@@ -898,20 +957,44 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
   const watchlistPatterns = [
     /(?:add|watch|track|follow)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+to my watchlist|\s+to watchlist)?/i,
     /(?:watchlist|my stocks|my list)/i,
-    /(?:remove|delete|unwatch)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+from my watchlist|\s+from watchlist)?/i
+    /(?:remove|delete|unwatch)\s+([A-Z]{1,5}|[a-zA-Z\s]+)(?:\s+from my watchlist|\s+from watchlist)?/i,
   ];
 
   for (let i = 0; i < watchlistPatterns.length; i++) {
     const match = text.match(watchlistPatterns[i]);
     if (match) {
-      if (i === 0) { // Add pattern
+      if (i === 0) {
+        // Add pattern
         const symbol = match[1].trim().toUpperCase();
-        return { command: "add", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
-      } else if (i === 1) { // View watchlist
-        return { command: "watchlist", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
-      } else if (i === 2) { // Remove pattern
+        return {
+          command: "add",
+          symbol,
+          symbols: undefined,
+          value: undefined,
+          direction: "above",
+          args: [symbol],
+        };
+      } else if (i === 1) {
+        // View watchlist
+        return {
+          command: "watchlist",
+          symbol: undefined,
+          symbols: undefined,
+          value: undefined,
+          direction: "above",
+          args: [],
+        };
+      } else if (i === 2) {
+        // Remove pattern
         const symbol = match[1].trim().toUpperCase();
-        return { command: "remove", symbol, symbols: undefined, value: undefined, direction: "above", args: [symbol] };
+        return {
+          command: "remove",
+          symbol,
+          symbols: undefined,
+          value: undefined,
+          direction: "above",
+          args: [symbol],
+        };
       }
     }
   }
@@ -919,13 +1002,20 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
   // Search patterns
   const searchPatterns = [
     /(?:search|find|look for)\s+([a-zA-Z\s]+)/i,
-    /what is\s+([A-Z]{1,5})/i
+    /what is\s+([A-Z]{1,5})/i,
   ];
 
   for (const pattern of searchPatterns) {
     const match = text.match(pattern);
     if (match) {
-      return { command: "search", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [match[1].trim()] };
+      return {
+        command: "search",
+        symbol: undefined,
+        symbols: undefined,
+        value: undefined,
+        direction: "above",
+        args: [match[1].trim()],
+      };
     }
   }
 
@@ -933,7 +1023,7 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
   const alertPatterns = [
     /(?:alert|notify|tell)\s+me\s+(?:when|if)\s+([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:goes|reaches|hits)\s+(?:above|over)\s+\$?(\d+(?:\.\d+)?)/i,
     /(?:alert|notify|tell)\s+me\s+(?:when|if)\s+([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:goes|reaches|hits|falls)\s+(?:below|under)\s+\$?(\d+(?:\.\d+)?)/i,
-    /set\s+(?:alert|notification)\s+(?:for\s+)?([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:at\s+)?\$?(\d+(?:\.\d+)?)/i
+    /set\s+(?:alert|notification)\s+(?:for\s+)?([A-Z]{1,5}|[a-zA-Z\s]+)\s+(?:at\s+)?\$?(\d+(?:\.\d+)?)/i,
   ];
 
   for (let i = 0; i < alertPatterns.length; i++) {
@@ -942,26 +1032,50 @@ function parseNaturalLanguage(text: string): TelegramBotCommand | null {
       const symbol = match[1].trim().toUpperCase();
       const price = parseFloat(match[2]);
       const direction = i === 1 ? "below" : "above"; // Second pattern is for "below"
-      return { command: "alert", symbol, symbols: undefined, value: price, direction, args: [symbol, match[2], direction] };
+      return {
+        command: "alert",
+        symbol,
+        symbols: undefined,
+        value: price,
+        direction,
+        args: [symbol, match[2], direction],
+      };
     }
   }
 
   // Help patterns
   if (/(?:help|what can you do|commands|how to|guide)/i.test(normalizedText)) {
-    return { command: "help", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
+    return {
+      command: "help",
+      symbol: undefined,
+      symbols: undefined,
+      value: undefined,
+      direction: "above",
+      args: [],
+    };
   }
 
   // Show menu patterns
   if (/(?:menu|options|main menu|show me)/i.test(normalizedText)) {
-    return { command: "menu", symbol: undefined, symbols: undefined, value: undefined, direction: "above", args: [] };
+    return {
+      command: "menu",
+      symbol: undefined,
+      symbols: undefined,
+      value: undefined,
+      direction: "above",
+      args: [],
+    };
   }
 
   return null;
 }
 
-async function handleStartCommand(chatId: string, from: TelegramUser): Promise<{ response: string; inlineKeyboard?: InlineKeyboard }> {
+async function handleStartCommand(
+  chatId: string,
+  from: TelegramUser,
+): Promise<{ response: string; inlineKeyboard?: InlineKeyboard }> {
   const name = from.first_name || "there";
-  
+
   const response = `👋 Hello ${name}! Welcome to the Stock Screener Bot!
 
 🚀 **What can I do?**
@@ -978,7 +1092,7 @@ Choose an option below to get started:`;
 
   return {
     response,
-    inlineKeyboard: createMainMenuKeyboard(isAuthenticated)
+    inlineKeyboard: createMainMenuKeyboard(isAuthenticated),
   };
 }
 
@@ -1407,7 +1521,7 @@ async function getCompanyName(symbol: string): Promise<string | null> {
         // Find exact match or first result
         const exactMatch = results.quotes.find((q: any) => q.symbol === symbol);
         const targetQuote = exactMatch || results.quotes[0];
-        
+
         return targetQuote.longName || targetQuote.shortName || symbol;
       }
     }
@@ -1602,8 +1716,10 @@ async function handleWatchlistCommand(
       watchlist.slice(0, 15).map(async (item) => {
         try {
           // Fetch real-time price data
-          console.log(`🔄 Fetching price data for ${item.symbol} from ${SUPABASE_URL}/functions/v1/yahoo-stock-price`);
-          
+          console.log(
+            `🔄 Fetching price data for ${item.symbol} from ${SUPABASE_URL}/functions/v1/yahoo-stock-price`,
+          );
+
           const priceResponse = await fetch(
             `${SUPABASE_URL}/functions/v1/yahoo-stock-price`,
             {
@@ -1616,30 +1732,44 @@ async function handleWatchlistCommand(
           );
 
           let priceData = null;
-          console.log(`📡 Price API response status for ${item.symbol}:`, priceResponse.status, priceResponse.statusText);
-          
+          console.log(
+            `📡 Price API response status for ${item.symbol}:`,
+            priceResponse.status,
+            priceResponse.statusText,
+          );
+
           if (priceResponse.ok) {
             try {
               priceData = await priceResponse.json();
-              console.log(`📈 Raw price data for ${item.symbol}:`, JSON.stringify(priceData, null, 2));
+              console.log(
+                `📈 Raw price data for ${item.symbol}:`,
+                JSON.stringify(priceData, null, 2),
+              );
             } catch (jsonError) {
-              console.error(`❌ JSON parse error for ${item.symbol}:`, jsonError);
+              console.error(
+                `❌ JSON parse error for ${item.symbol}:`,
+                jsonError,
+              );
               const responseText = await priceResponse.text();
               console.error(`📄 Raw response text:`, responseText);
             }
           } else {
             const errorText = await priceResponse.text();
-            console.error(`❌ Failed to fetch price for ${item.symbol}:`, priceResponse.status, priceResponse.statusText);
+            console.error(
+              `❌ Failed to fetch price for ${item.symbol}:`,
+              priceResponse.status,
+              priceResponse.statusText,
+            );
             console.error(`📄 Error response body:`, errorText);
           }
 
-                  // Fetch alert status
-        const { data: alerts } = await supabase
-          .from("alerts")
-          .select("target_price, condition")
-          .eq("user_id", user.id)
-          .eq("symbol", item.symbol)
-          .eq("is_active", true);
+          // Fetch alert status
+          const { data: alerts } = await supabase
+            .from("alerts")
+            .select("target_price, condition")
+            .eq("user_id", user.id)
+            .eq("symbol", item.symbol)
+            .eq("is_active", true);
 
           // Update company name in database if we got it from price data
           if (priceData && priceData.name && priceData.name !== item.symbol) {
@@ -1648,9 +1778,14 @@ async function handleWatchlistCommand(
                 .from("watchlist_items")
                 .update({ company_name: priceData.name })
                 .eq("id", item.id);
-              console.log(`✅ Updated company name for ${item.symbol}: ${priceData.name}`);
+              console.log(
+                `✅ Updated company name for ${item.symbol}: ${priceData.name}`,
+              );
             } catch (updateError) {
-              console.error(`❌ Failed to update company name for ${item.symbol}:`, updateError);
+              console.error(
+                `❌ Failed to update company name for ${item.symbol}:`,
+                updateError,
+              );
             }
           }
 
@@ -1696,15 +1831,17 @@ async function sendTelegramMessage(
   }
 
   try {
-    console.log(`📤 Sending message to chat_id: ${chatId}, text length: ${text.length}`);
-    
+    console.log(
+      `📤 Sending message to chat_id: ${chatId}, text length: ${text.length}`,
+    );
+
     // Handle Telegram's 4096 character limit
     if (text.length > 4096) {
       console.warn(`⚠️ Message too long (${text.length} chars), splitting...`);
       await sendLongMessage(chatId, text, replyMarkup);
       return;
     }
-    
+
     const body: any = {
       chat_id: chatId,
       text: text,
@@ -1734,8 +1871,11 @@ async function sendTelegramMessage(
         errorData,
       );
       console.error("📋 Chat ID that failed:", chatId);
-      console.error("📋 Bot token configured:", TELEGRAM_BOT_TOKEN ? "Yes" : "No");
-      
+      console.error(
+        "📋 Bot token configured:",
+        TELEGRAM_BOT_TOKEN ? "Yes" : "No",
+      );
+
       // If message too long, try truncating
       if (errorData.includes("message is too long")) {
         console.log("🔄 Attempting to truncate message...");
@@ -1743,7 +1883,7 @@ async function sendTelegramMessage(
         await sendTelegramMessage(chatId, truncatedText, replyMarkup);
         return;
       }
-      
+
       // If chat not found, this might be a test payload or invalid chat
       if (errorData.includes("chat not found")) {
         console.log("💡 This might be a test payload with invalid chat_id");
@@ -1756,33 +1896,43 @@ async function sendTelegramMessage(
   }
 }
 
-async function sendLongMessage(chatId: string, text: string, replyMarkup?: any): Promise<void> {
+async function sendLongMessage(
+  chatId: string,
+  text: string,
+  replyMarkup?: any,
+): Promise<void> {
   // Split message into parts, preserving sections
-  const sections = text.split('\n\n');
-  let currentMessage = '';
+  const sections = text.split("\n\n");
+  let currentMessage = "";
   let partNumber = 1;
-  
+
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i];
-    
+
     // If adding this section would exceed limit, send current message
-    if (currentMessage.length + section.length + 2 > 3900) { // Leave some buffer
+    if (currentMessage.length + section.length + 2 > 3900) {
+      // Leave some buffer
       if (currentMessage) {
         const footer = `\n\n📄 Part ${partNumber} of analysis...`;
         await sendTelegramMessage(chatId, currentMessage + footer);
-        currentMessage = '';
+        currentMessage = "";
         partNumber++;
-        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between messages
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay between messages
       }
     }
-    
-    currentMessage += (currentMessage ? '\n\n' : '') + section;
+
+    currentMessage += (currentMessage ? "\n\n" : "") + section;
   }
-  
+
   // Send remaining content with reply markup (only on last part)
   if (currentMessage) {
-    const finalFooter = partNumber > 1 ? `\n\n📄 Part ${partNumber} (final)` : '';
-    await sendTelegramMessage(chatId, currentMessage + finalFooter, replyMarkup);
+    const finalFooter =
+      partNumber > 1 ? `\n\n📄 Part ${partNumber} (final)` : "";
+    await sendTelegramMessage(
+      chatId,
+      currentMessage + finalFooter,
+      replyMarkup,
+    );
   }
 }
 
@@ -1843,10 +1993,18 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
       );
     } else if (data.startsWith("menu_")) {
       // Handle menu navigation
-      response = await handleMenuCallbackQuery(chatId, data, callbackQuery.from);
+      response = await handleMenuCallbackQuery(
+        chatId,
+        data,
+        callbackQuery.from,
+      );
     } else if (data.startsWith("watchlist_")) {
       // Handle watchlist actions
-      response = await handleWatchlistCallbackQuery(chatId, data, callbackQuery.from);
+      response = await handleWatchlistCallbackQuery(
+        chatId,
+        data,
+        callbackQuery.from,
+      );
     } else {
       response = "Unknown action. Please try again.";
     }
@@ -2098,32 +2256,30 @@ function createMainMenuKeyboard(isAuthenticated: boolean): InlineKeyboard {
   const keyboard = [
     [
       { text: "🔍 Search Stocks", callback_data: "menu_search" },
-      { text: "📊 Research Stock", callback_data: "menu_research" }
-    ]
+      { text: "📊 Research Stock", callback_data: "menu_research" },
+    ],
   ];
 
   if (isAuthenticated) {
     keyboard.push([
       { text: "⭐ My Watchlist", callback_data: "menu_watchlist" },
-      { text: "🚨 My Alerts", callback_data: "menu_alerts" }
+      { text: "🚨 My Alerts", callback_data: "menu_alerts" },
     ]);
     keyboard.push([
       { text: "➕ Add to Watchlist", callback_data: "menu_add" },
-      { text: "🗑️ Remove from Watchlist", callback_data: "menu_remove" }
+      { text: "🗑️ Remove from Watchlist", callback_data: "menu_remove" },
     ]);
     keyboard.push([
-      { text: "📈 Recent Analysis", callback_data: "menu_recent" }
+      { text: "📈 Recent Analysis", callback_data: "menu_recent" },
     ]);
   } else {
     keyboard.push([
       { text: "🔗 Link Account", callback_data: "menu_link" },
-      { text: "📝 Sign Up", callback_data: "menu_signup" }
+      { text: "📝 Sign Up", callback_data: "menu_signup" },
     ]);
   }
 
-  keyboard.push([
-    { text: "❓ Help", callback_data: "menu_help" }
-  ]);
+  keyboard.push([{ text: "❓ Help", callback_data: "menu_help" }]);
 
   return { inline_keyboard: keyboard };
 }
@@ -2133,15 +2289,11 @@ function createAccountMenuKeyboard(): InlineKeyboard {
     inline_keyboard: [
       [
         { text: "🔗 Link Existing Account", callback_data: "auth_link_prompt" },
-        { text: "📝 Create New Account", callback_data: "auth_signup" }
+        { text: "📝 Create New Account", callback_data: "auth_signup" },
       ],
-      [
-        { text: "❓ What's the difference?", callback_data: "auth_explain" }
-      ],
-      [
-        { text: "⬅️ Back to Menu", callback_data: "menu_main" }
-      ]
-    ]
+      [{ text: "❓ What's the difference?", callback_data: "auth_explain" }],
+      [{ text: "⬅️ Back to Menu", callback_data: "menu_main" }],
+    ],
   };
 }
 
@@ -2152,14 +2304,14 @@ async function handleMenuCommand(
   // Check if user is authenticated
   const authenticatedUser = await authenticateUser(from.id, chatId);
   const isAuthenticated = !!authenticatedUser;
-  
-  const response = isAuthenticated 
+
+  const response = isAuthenticated
     ? `👋 Welcome back, ${authenticatedUser.display_name || from.first_name}!\n\nChoose what you'd like to do:`
     : `👋 Welcome ${from.first_name}!\n\nChoose what you'd like to do:`;
 
   return {
     response,
-    inlineKeyboard: createMainMenuKeyboard(isAuthenticated)
+    inlineKeyboard: createMainMenuKeyboard(isAuthenticated),
   };
 }
 
@@ -2169,58 +2321,73 @@ async function handleMenuCallbackQuery(
   from: any,
 ): Promise<string> {
   const action = data.replace("menu_", "");
-  
+
   switch (action) {
     case "main":
       const menuResult = await handleMenuCommand(chatId, from);
-      await sendTelegramMessage(chatId, menuResult.response, menuResult.inlineKeyboard);
+      await sendTelegramMessage(
+        chatId,
+        menuResult.response,
+        menuResult.inlineKeyboard,
+      );
       return "🏠 Main menu";
-      
+
     case "search":
       return "🔍 **Stock Search**\n\nType: `/search [company name or symbol]`\n\nExamples:\n• `/search Apple`\n• `/search AAPL`\n• `/search Tesla`";
-      
+
     case "research":
       return "📊 **Stock Research**\n\nType: `/research [SYMBOL]`\n\nExamples:\n• `/research AAPL`\n• `/research TSLA`\n• `/research GOOGL`\n\n💡 Requires account - use /signup or /link";
-      
+
     case "watchlist":
       const watchlistUser = await authenticateUser(from.id, chatId);
       if (!watchlistUser) {
         return formatAuthenticationPrompt();
       }
-      const watchlistResult = await handleWatchlistCommand(chatId, watchlistUser);
-      await sendTelegramMessage(chatId, watchlistResult.response, watchlistResult.inlineKeyboard);
+      const watchlistResult = await handleWatchlistCommand(
+        chatId,
+        watchlistUser,
+      );
+      await sendTelegramMessage(
+        chatId,
+        watchlistResult.response,
+        watchlistResult.inlineKeyboard,
+      );
       return "📋 Your watchlist";
-      
+
     case "alerts":
       const alertUser = await authenticateUser(from.id, chatId);
       if (!alertUser) {
         return formatAuthenticationPrompt();
       }
       return await handleAlertsCommand(chatId, alertUser);
-      
+
     case "add":
       return "➕ **Add to Watchlist**\n\nType: `/add [SYMBOL]`\n\nExamples:\n• `/add AAPL`\n• `/add TSLA`\n\n💡 Requires account - use /signup or /link";
-      
+
     case "remove":
       return "🗑️ **Remove from Watchlist**\n\nType: `/remove [SYMBOL]`\n\nExamples:\n• `/remove AAPL`\n• `/remove TSLA`\n\n💡 Requires account - use /signup or /link";
-      
+
     case "recent":
       return formatRecentAnalyses();
-      
+
     case "link":
       return "🔗 **Link Your Account**\n\nIf you have a web account:\n1. Go to your account settings\n2. Generate a link token\n3. Type: `/link [TOKEN]`\n\nExample: `/link abc123def456`";
-      
+
     case "signup":
       const signupResult = await handleSignupCommand(chatId, from);
       if (signupResult.inlineKeyboard) {
-        await sendTelegramMessage(chatId, signupResult.response, signupResult.inlineKeyboard);
+        await sendTelegramMessage(
+          chatId,
+          signupResult.response,
+          signupResult.inlineKeyboard,
+        );
         return "📝 Account creation";
       }
       return signupResult.response;
-      
+
     case "help":
       return formatHelpForTelegram();
-      
+
     default:
       return "Unknown menu action. Please try again.";
   }
@@ -2232,13 +2399,13 @@ async function handleWatchlistCallbackQuery(
   from: any,
 ): Promise<string> {
   const action = data.replace("watchlist_", "");
-  
+
   // Check authentication for all watchlist actions
   const user = await authenticateUser(from.id, chatId);
   if (!user) {
     return formatAuthenticationPrompt();
   }
-  
+
   switch (action) {
     case "research_all":
       // Get all symbols from watchlist and research them
@@ -2247,28 +2414,32 @@ async function handleWatchlistCallbackQuery(
         .select("symbol")
         .eq("user_id", user.id)
         .limit(5); // Limit to 5 to avoid overwhelming
-      
+
       if (!watchlist || watchlist.length === 0) {
         return "📭 Your watchlist is empty. Add some stocks first with /add [SYMBOL]";
       }
-      
-      const symbols = watchlist.map(item => item.symbol);
+
+      const symbols = watchlist.map((item) => item.symbol);
       const researchResult = await handleMultipleResearch(chatId, symbols);
       await sendTelegramMessage(chatId, researchResult.response);
       return "📊 Researching all watchlist stocks...";
-      
+
     case "refresh":
       // Refresh the watchlist display
       const watchlistResult = await handleWatchlistCommand(chatId, user);
-      await sendTelegramMessage(chatId, watchlistResult.response, watchlistResult.inlineKeyboard);
+      await sendTelegramMessage(
+        chatId,
+        watchlistResult.response,
+        watchlistResult.inlineKeyboard,
+      );
       return "🔄 Watchlist refreshed";
-      
+
     case "add_new":
-      return "➕ **Add New Stock**\n\nType: `/add [SYMBOL]`\n\nExamples:\n• `/add AAPL`\n• `/add TSLA`\n• `/add GOOGL`\n\nOr use natural language:\n• \"Add Apple to my watchlist\"\n• \"Track Tesla stock\"";
-      
+      return '➕ **Add New Stock**\n\nType: `/add [SYMBOL]`\n\nExamples:\n• `/add AAPL`\n• `/add TSLA`\n• `/add GOOGL`\n\nOr use natural language:\n• "Add Apple to my watchlist"\n• "Track Tesla stock"';
+
     case "set_alerts":
-      return "🚨 **Set Price Alerts**\n\nType: `/alert [SYMBOL] [PRICE] [above/below]`\n\nExamples:\n• `/alert AAPL 200 above`\n• `/alert TSLA 150 below`\n\nOr use natural language:\n• \"Alert me when Apple goes above $200\"\n• \"Tell me if Tesla falls below $150\"";
-      
+      return '🚨 **Set Price Alerts**\n\nType: `/alert [SYMBOL] [PRICE] [above/below]`\n\nExamples:\n• `/alert AAPL 200 above`\n• `/alert TSLA 150 below`\n\nOr use natural language:\n• "Alert me when Apple goes above $200"\n• "Tell me if Tesla falls below $150"';
+
     default:
       return "Unknown watchlist action. Please try again.";
   }

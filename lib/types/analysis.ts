@@ -14,11 +14,19 @@ export interface Recommendation {
   confidence: "HIGH" | "MEDIUM" | "LOW";
 }
 
+export interface CompetitorAnalysis {
+  marketPosition: string;
+  competitiveAdvantages: string[];
+  threats: string[];
+  industryOutlook: string;
+}
+
 export interface ProfessionalAnalysis {
   investmentThesis: string;
   bullishArguments: string[];
   bearishArguments: string[];
   financialHighlights: FinancialHighlights;
+  competitorAnalysis: CompetitorAnalysis;
   recommendation: Recommendation;
 }
 

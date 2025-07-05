@@ -28,10 +28,16 @@ interface ProfessionalAnalysis {
   investmentThesis: string;
   bullishArguments: string[];
   bearishArguments: string[];
+  financialHighlights: {
+    valuation: string;
+    profitability: string;
+    financialStrength: string;
+    dividend: string;
+  };
   competitorAnalysis: {
     marketPosition: string;
-    competitiveAdvantages: string;
-    threats: string;
+    competitiveAdvantages: string[];
+    threats: string[];
     industryOutlook: string;
   };
   recommendation: {
@@ -57,20 +63,20 @@ interface YahooStockData {
   currency: string;
   marketCap?: number;
   volume: number;
-  
+
   // Valuation metrics
   trailingPE?: number;
   forwardPE?: number;
   priceToBook?: number;
   priceToSales?: number;
   pegRatio?: number;
-  
+
   // Per-share metrics
   earningsPerShare?: number;
   forwardEps?: number;
   bookValuePerShare?: number;
   revenuePerShare?: number;
-  
+
   // Financial health
   totalRevenue?: number;
   totalCash?: number;
@@ -78,40 +84,40 @@ interface YahooStockData {
   debtToEquity?: number;
   currentRatio?: number;
   quickRatio?: number;
-  
+
   // Profitability metrics
   returnOnAssets?: number;
   returnOnEquity?: number;
   grossMargins?: number;
   operatingMargins?: number;
   profitMargins?: number;
-  
+
   // Cash flow
   operatingCashflow?: number;
   freeCashflow?: number;
-  
+
   // Growth metrics
   earningsGrowth?: number;
   revenueGrowth?: number;
-  
+
   // Dividend information
   dividendRate?: number;
   dividendYield?: number;
   payoutRatio?: number;
-  
+
   // Market metrics
   beta?: number;
   fiftyTwoWeekLow?: number;
   fiftyTwoWeekHigh?: number;
-  
+
   // Share information
   sharesOutstanding?: number;
   floatShares?: number;
-  
+
   // Business information
   sector?: string;
   industry?: string;
-  
+
   // Exchange info
   exchange?: string;
   quoteType?: string;
@@ -123,7 +129,7 @@ serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { 
+    return new Response("Method not allowed", {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -132,12 +138,15 @@ serve(async (req: Request) => {
   try {
     // Main analysis function
     const { symbol, chatId } = await req.json();
-    
+
     if (!symbol) {
-      return new Response(JSON.stringify({ error: "Symbol parameter is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Symbol parameter is required" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
     }
 
     console.log(`[${symbol}] Starting professional analysis...`);
@@ -153,42 +162,59 @@ serve(async (req: Request) => {
         });
       }
 
-      console.log(`[${symbol}] Fetching comprehensive financial data from Yahoo Finance...`);
-      
+      console.log(
+        `[${symbol}] Fetching comprehensive financial data from Yahoo Finance...`,
+      );
+
       // Fetch comprehensive financial data from Yahoo Finance
       let stockData: YahooStockData | null = null;
-      
+
       try {
         // Get stock data from our yahoo-stock-data function
-        const stockDataResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/yahoo-stock-data`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+        const stockDataResponse = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/yahoo-stock-data`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+            },
+            body: JSON.stringify({ symbol }),
           },
-          body: JSON.stringify({ symbol }),
-        });
+        );
 
         if (stockDataResponse.ok) {
           stockData = await stockDataResponse.json();
-          console.log(`[${symbol}] Successfully fetched comprehensive Yahoo Finance data:`, {
-            price: stockData?.currentPrice,
-            pe: stockData?.trailingPE,
-            marketCap: stockData?.marketCap,
-            sector: stockData?.sector,
-            industry: stockData?.industry,
-            revenue: stockData?.totalRevenue,
-            debtToEquity: stockData?.debtToEquity
-          });
+          console.log(
+            `[${symbol}] Successfully fetched comprehensive Yahoo Finance data:`,
+            {
+              price: stockData?.currentPrice,
+              pe: stockData?.trailingPE,
+              marketCap: stockData?.marketCap,
+              sector: stockData?.sector,
+              industry: stockData?.industry,
+              revenue: stockData?.totalRevenue,
+              debtToEquity: stockData?.debtToEquity,
+            },
+          );
         } else {
-          console.log(`[${symbol}] Yahoo Finance data fetch failed, proceeding with Gemini only`);
+          console.log(
+            `[${symbol}] Yahoo Finance data fetch failed, proceeding with Gemini only`,
+          );
         }
       } catch (error) {
-        console.log(`[${symbol}] Error fetching Yahoo Finance data:`, error.message);
+        console.log(
+          `[${symbol}] Error fetching Yahoo Finance data:`,
+          error.message,
+        );
       }
 
       // Generate analysis with Gemini using the comprehensive financial data and retry logic
-      const analysis = await generateWithGeminiWithRetry(symbol, stockData, chatId);
+      const analysis = await generateWithGeminiWithRetry(
+        symbol,
+        stockData,
+        chatId,
+      );
 
       const result: AnalysisResult = {
         symbol,
@@ -202,17 +228,17 @@ serve(async (req: Request) => {
       cache.set(cacheKey, { data: result, timestamp: Date.now() });
 
       console.log(`✅ [${symbol}] Analysis completed successfully`);
-      
+
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     } catch (error) {
       console.error(`❌ [${symbol}] Error generating analysis:`, error.message);
       return new Response(
-        JSON.stringify({ 
-          error: "Analysis generation failed", 
+        JSON.stringify({
+          error: "Analysis generation failed",
           details: error.message,
-          symbol 
+          symbol,
         }),
         {
           status: 500,
@@ -237,9 +263,12 @@ serve(async (req: Request) => {
 });
 
 // Helper function to send notifications to Telegram during analysis
-async function sendTelegramNotification(chatId: string, message: string): Promise<void> {
+async function sendTelegramNotification(
+  chatId: string,
+  message: string,
+): Promise<void> {
   if (!chatId) return;
-  
+
   try {
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
     if (!botToken) return;
@@ -266,43 +295,45 @@ async function generateWithGeminiWithRetry(
   maxRetries: number = 3,
 ): Promise<ProfessionalAnalysis> {
   let lastError: Error;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await generateWithGemini(symbol, stockData);
     } catch (error) {
       lastError = error;
-      
+
       // Only retry on 503 errors (service overloaded)
       if (error.message.includes("503") && attempt < maxRetries) {
         const delay = attempt * 2; // 2s, 4s, 6s
-        console.log(`[${symbol}] Attempt ${attempt} failed with 503, retrying in ${delay}s...`);
-        
+        console.log(
+          `[${symbol}] Attempt ${attempt} failed with 503, retrying in ${delay}s...`,
+        );
+
         // Notify user about retry
         if (chatId) {
           await sendTelegramNotification(
             chatId,
-            `⏳ *${symbol} Analysis*\n\nGemini AI is busy (attempt ${attempt}/${maxRetries}). Retrying in ${delay} seconds...\n\n_Please wait while we process your request._`
+            `⏳ *${symbol} Analysis*\n\nGemini AI is busy (attempt ${attempt}/${maxRetries}). Retrying in ${delay} seconds...\n\n_Please wait while we process your request._`,
           );
         }
-        
-        await new Promise(resolve => setTimeout(resolve, delay * 1000));
+
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
         continue;
       }
-      
+
       // For non-503 errors or final attempt, break immediately
       break;
     }
   }
-  
+
   // Final failure notification
   if (chatId) {
     await sendTelegramNotification(
       chatId,
-      `❌ *${symbol} Analysis Failed*\n\nGemini AI is currently overloaded. Please try again in a few minutes.\n\n_We'll keep improving our service reliability!_`
+      `❌ *${symbol} Analysis Failed*\n\nGemini AI is currently overloaded. Please try again in a few minutes.\n\n_We'll keep improving our service reliability!_`,
     );
   }
-  
+
   throw lastError;
 }
 
@@ -338,21 +369,21 @@ async function generateWithGemini(
           safetySettings: [
             {
               category: "HARM_CATEGORY_HARASSMENT",
-              threshold: "BLOCK_NONE"
+              threshold: "BLOCK_NONE",
             },
             {
-              category: "HARM_CATEGORY_HATE_SPEECH", 
-              threshold: "BLOCK_NONE"
+              category: "HARM_CATEGORY_HATE_SPEECH",
+              threshold: "BLOCK_NONE",
             },
             {
               category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              threshold: "BLOCK_NONE"
+              threshold: "BLOCK_NONE",
             },
             {
               category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-              threshold: "BLOCK_NONE"
-            }
-          ]
+              threshold: "BLOCK_NONE",
+            },
+          ],
         }),
       },
     );
@@ -366,52 +397,76 @@ async function generateWithGemini(
     }
 
     const data = await response.json();
-    
+
     // Enhanced debugging
     console.log(`[${symbol}] Gemini API response structure:`, {
       hasCandidates: !!data.candidates,
       candidatesLength: data.candidates?.length || 0,
-      firstCandidate: data.candidates?.[0] ? {
-        hasContent: !!data.candidates[0].content,
-        hasParts: !!data.candidates[0].content?.parts,
-        partsLength: data.candidates[0].content?.parts?.length || 0,
-        finishReason: data.candidates[0].finishReason,
-        safetyRatings: data.candidates[0].safetyRatings
-      } : null
+      firstCandidate: data.candidates?.[0]
+        ? {
+            hasContent: !!data.candidates[0].content,
+            hasParts: !!data.candidates[0].content?.parts,
+            partsLength: data.candidates[0].content?.parts?.length || 0,
+            finishReason: data.candidates[0].finishReason,
+            safetyRatings: data.candidates[0].safetyRatings,
+          }
+        : null,
     });
 
     // Check for safety filter blocks
     if (data.candidates?.[0]?.finishReason === "SAFETY") {
-      console.error(`[${symbol}] Gemini blocked content due to safety filters:`, data.candidates[0].safetyRatings);
-      throw new Error("Content blocked by Gemini safety filters. Using fallback analysis.");
+      console.error(
+        `[${symbol}] Gemini blocked content due to safety filters:`,
+        data.candidates[0].safetyRatings,
+      );
+      throw new Error(
+        "Content blocked by Gemini safety filters. Using fallback analysis.",
+      );
     }
 
     // Check for token limit exceeded
     if (data.candidates?.[0]?.finishReason === "MAX_TOKENS") {
-      console.error(`[${symbol}] Gemini hit token limit. Response was truncated.`);
-      throw new Error("Response truncated due to token limit. Using fallback analysis.");
+      console.error(
+        `[${symbol}] Gemini hit token limit. Response was truncated.`,
+      );
+      throw new Error(
+        "Response truncated due to token limit. Using fallback analysis.",
+      );
     }
 
     // Check for other finish reasons
-    if (data.candidates?.[0]?.finishReason && data.candidates[0].finishReason !== "STOP") {
-      console.warn(`[${symbol}] Gemini finished with reason: ${data.candidates[0].finishReason}`);
+    if (
+      data.candidates?.[0]?.finishReason &&
+      data.candidates[0].finishReason !== "STOP"
+    ) {
+      console.warn(
+        `[${symbol}] Gemini finished with reason: ${data.candidates[0].finishReason}`,
+      );
     }
 
     const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!analysisText) {
       console.error(`[${symbol}] No analysis text returned from Gemini.`);
-      console.error(`[${symbol}] Full API response:`, JSON.stringify(data, null, 2));
+      console.error(
+        `[${symbol}] Full API response:`,
+        JSON.stringify(data, null, 2),
+      );
       throw new Error("No content returned from Gemini API.");
     }
 
-    console.log(`[${symbol}] Gemini response received, length: ${analysisText.length}`);
+    console.log(
+      `[${symbol}] Gemini response received, length: ${analysisText.length}`,
+    );
 
     try {
       const parsedAnalysis = parseAnalysisResponse(analysisText);
       return parsedAnalysis;
     } catch (error) {
-      console.error(`[${symbol}] Error parsing Gemini response:`, error.message);
+      console.error(
+        `[${symbol}] Error parsing Gemini response:`,
+        error.message,
+      );
       console.log(`[${symbol}] Raw Gemini response:`, analysisText);
       throw new Error("Failed to parse Gemini analysis response.");
     }
@@ -421,7 +476,10 @@ async function generateWithGemini(
   }
 }
 
-function buildAnalysisPrompt(symbol: string, stockData?: YahooStockData): string {
+function buildAnalysisPrompt(
+  symbol: string,
+  stockData?: YahooStockData,
+): string {
   const displaySymbol = symbol.toUpperCase();
   const companyName = stockData?.name || displaySymbol;
 
@@ -429,7 +487,9 @@ function buildAnalysisPrompt(symbol: string, stockData?: YahooStockData): string
   let financialDataSection = "";
   if (stockData) {
     const formatNumber = (num?: number, prefix = "", suffix = ""): string => {
-      return num !== undefined && num !== null ? `${prefix}${num}${suffix}` : "N/A";
+      return num !== undefined && num !== null
+        ? `${prefix}${num}${suffix}`
+        : "N/A";
     };
 
     const formatCurrency = (num?: number): string => {
@@ -441,7 +501,9 @@ function buildAnalysisPrompt(symbol: string, stockData?: YahooStockData): string
     };
 
     const formatPercent = (num?: number): string => {
-      return num !== undefined && num !== null ? `${(num * 100).toFixed(2)}%` : "N/A";
+      return num !== undefined && num !== null
+        ? `${(num * 100).toFixed(2)}%`
+        : "N/A";
     };
 
     financialDataSection = `
@@ -509,13 +571,17 @@ COMPANY CONTEXT:
 Symbol: ${displaySymbol}
 Company: ${companyName}${financialDataSection}
 
-${!financialDataSection ? `IMPORTANT: Use your comprehensive knowledge of current financial data for ${displaySymbol}:
+${
+  !financialDataSection
+    ? `IMPORTANT: Use your comprehensive knowledge of current financial data for ${displaySymbol}:
 - Current stock price and recent performance
 - TTM P/E ratio, P/B ratio, and other valuation metrics
 - ROE, ROA, and profitability metrics
 - Revenue growth, margins, and financial health
 - Recent earnings, guidance, and analyst expectations
-- Competitive position and market dynamics` : ''}
+- Competitive position and market dynamics`
+    : ""
+}
 
 CRITICAL: Base your analysis on accurate, current financial knowledge and the provided real-time data. Consider recent market developments, earnings results, and industry trends that affect valuation and outlook.
 

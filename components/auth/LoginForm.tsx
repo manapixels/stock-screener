@@ -147,7 +147,7 @@ export default function LoginForm() {
     try {
       await signInWithTelegram(user);
       toast.success("Successfully logged in with Telegram!");
-      
+
       // Redirect back to intended destination
       const redirectPath = sessionStorage.getItem("redirectAfterAuth");
       if (redirectPath) {

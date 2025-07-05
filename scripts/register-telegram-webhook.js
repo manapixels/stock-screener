@@ -2,7 +2,7 @@
 
 const https = require("https");
 const { URL } = require("url");
-require('dotenv').config({ path: `.env.local` })
+require("dotenv").config({ path: `.env.local` });
 
 // Get bot token from environment variable
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
