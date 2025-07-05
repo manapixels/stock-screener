@@ -518,9 +518,10 @@ function formatHelpForTelegram(): string {
 • Check /recent for your analysis history`;
 }
 
-function formatWatchlistForTelegram(watchlist: any[]): string {
+function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlineKeyboard?: InlineKeyboard } {
   if (!watchlist || watchlist.length === 0) {
-    return `📋 *Your Watchlist*
+    return {
+      response: `📋 *Your Watchlist*
 
 📭 Your watchlist is empty.
 
@@ -532,7 +533,8 @@ function formatWatchlistForTelegram(watchlist: any[]): string {
 🚀 **Quick adds:**
 • /add AAPL - Apple Inc.
 • /add TSLA - Tesla Inc.
-• /add MSFT - Microsoft Corp.`;
+• /add MSFT - Microsoft Corp.`,
+    };
   }
 
   const formatted = watchlist
@@ -540,24 +542,67 @@ function formatWatchlistForTelegram(watchlist: any[]): string {
     .map((item, i) => {
       const symbol = item.symbol;
       const name = item.company_name || "N/A";
-      const dateAdded = item.created_at ? new Date(item.created_at).toLocaleDateString() : "";
       
-      return `${i + 1}. *${symbol}* - ${name}${dateAdded ? ` (${dateAdded})` : ""}`;
+      // Format price data
+      let priceInfo = "";
+      let performanceEmoji = "";
+      
+      if (item.priceData && typeof item.priceData.price === 'number' && item.priceData.price > 0) {
+        const price = item.priceData.price;
+        const change = item.priceData.change || 0;
+        const changePercent = item.priceData.changePercent || 0;
+        
+        // Performance emoji based on change
+        if (changePercent > 0.5) {
+          performanceEmoji = "📈";
+        } else if (changePercent < -0.5) {
+          performanceEmoji = "📉";
+        } else {
+          performanceEmoji = "➡️";
+        }
+        
+        const changeSign = change >= 0 ? "+" : "";
+        priceInfo = `\n$${price.toFixed(2)} (${changeSign}${changePercent.toFixed(1)}% today) ${performanceEmoji}`;
+      } else {
+        console.log(`❌ Price data for ${symbol}:`, item.priceData);
+        priceInfo = "\nPrice unavailable";
+      }
+      
+      // Use company name from price data if available, otherwise use stored name
+      const displayName = (item.priceData && item.priceData.name) ? item.priceData.name : (name !== symbol ? name : "N/A");
+      
+      // Format alert status
+      let alertInfo = "";
+      if (item.alerts && item.alerts.length > 0) {
+        const alert = item.alerts[0]; // Show first alert
+        alertInfo = `\nAlert: $${alert.target_price} (${alert.alert_type})`;
+      } else {
+        alertInfo = "\nNo alerts set";
+      }
+      
+      return `*${symbol}* - ${displayName}${priceInfo}${alertInfo}`;
     })
-    .join("\n");
+    .join("\n\n");
 
   const totalCount = watchlist.length;
   const showingText = totalCount > 15 ? `\n\n📊 Showing 15 of ${totalCount} stocks` : "";
 
-  return `📋 *Your Watchlist*
+  // Create inline keyboard with action buttons
+  const inlineKeyboard: InlineKeyboard = {
+    inline_keyboard: [
+      [
+        { text: "➕ Add", callback_data: "watchlist_add_new" },
+        { text: "🔄 Refresh", callback_data: "watchlist_refresh" },
+      ]
+    ],
+  };
 
-${formatted}${showingText}
+  return {
+    response: `📋 *Your Watchlist* (${totalCount} stocks)
 
-💡 **Quick actions:**
-• /research SYMBOL - Analyze any stock
-• /add SYMBOL - Add new stock
-• /remove SYMBOL - Remove stock
-• /alert SYMBOL PRICE - Set price alert`;
+${formatted}${showingText}`,
+    inlineKeyboard,
+  };
 }
 
 function formatAlertConfirmationForTelegram(
@@ -741,9 +786,16 @@ Or use the menu below:`;
       case "watchlist":
         const watchlistUser = await authenticateUser(message.from.id, chatId);
         if (!watchlistUser) {
-          return formatAuthenticationPrompt();
+          await sendTelegramMessage(
+            chatId,
+            formatAuthenticationPrompt(),
+            createAuthenticationInlineKeyboard(),
+          );
+          return new Response("OK", { status: 200 });
         }
-        response = await handleWatchlistCommand(chatId, watchlistUser);
+        const watchlistResult = await handleWatchlistCommand(chatId, watchlistUser);
+        response = watchlistResult.response;
+        inlineKeyboard = watchlistResult.inlineKeyboard;
         break;
       case "add":
         response = await handleAddCommand(chatId, command.symbol, authenticatedUser!);
@@ -1521,7 +1573,7 @@ ${alertList}
 async function handleWatchlistCommand(
   chatId: string,
   user: AuthenticatedUser,
-): Promise<string> {
+): Promise<{ response: string; inlineKeyboard?: InlineKeyboard }> {
   try {
     // Get user's watchlist
     const { data: watchlist, error } = await supabase
@@ -1532,17 +1584,104 @@ async function handleWatchlistCommand(
 
     if (error) {
       console.error("Error fetching watchlist:", error);
-      return formatErrorForTelegram(
-        "Failed to fetch your watchlist. Please try again.",
-      );
+      return {
+        response: formatErrorForTelegram(
+          "Failed to fetch your watchlist. Please try again.",
+        ),
+      };
     }
 
-    return formatWatchlistForTelegram(watchlist || []);
+    if (!watchlist || watchlist.length === 0) {
+      return {
+        response: formatWatchlistForTelegram([]),
+      };
+    }
+
+    // Fetch real-time price data for all stocks
+    const enrichedWatchlist = await Promise.all(
+      watchlist.slice(0, 15).map(async (item) => {
+        try {
+          // Fetch real-time price data
+          console.log(`🔄 Fetching price data for ${item.symbol} from ${SUPABASE_URL}/functions/v1/yahoo-stock-price`);
+          
+          const priceResponse = await fetch(
+            `${SUPABASE_URL}/functions/v1/yahoo-stock-price`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ symbol: item.symbol }),
+            },
+          );
+
+          let priceData = null;
+          console.log(`📡 Price API response status for ${item.symbol}:`, priceResponse.status, priceResponse.statusText);
+          
+          if (priceResponse.ok) {
+            try {
+              priceData = await priceResponse.json();
+              console.log(`📈 Raw price data for ${item.symbol}:`, JSON.stringify(priceData, null, 2));
+            } catch (jsonError) {
+              console.error(`❌ JSON parse error for ${item.symbol}:`, jsonError);
+              const responseText = await priceResponse.text();
+              console.error(`📄 Raw response text:`, responseText);
+            }
+          } else {
+            const errorText = await priceResponse.text();
+            console.error(`❌ Failed to fetch price for ${item.symbol}:`, priceResponse.status, priceResponse.statusText);
+            console.error(`📄 Error response body:`, errorText);
+          }
+
+          // Fetch alert status
+          const { data: alerts } = await supabase
+            .from("alerts")
+            .select("target_price, alert_type")
+            .eq("user_id", user.id)
+            .eq("symbol", item.symbol)
+            .eq("is_active", true);
+
+          // Update company name in database if we got it from price data
+          if (priceData && priceData.name && priceData.name !== item.symbol) {
+            try {
+              await supabase
+                .from("watchlist_items")
+                .update({ company_name: priceData.name })
+                .eq("id", item.id);
+              console.log(`✅ Updated company name for ${item.symbol}: ${priceData.name}`);
+            } catch (updateError) {
+              console.error(`❌ Failed to update company name for ${item.symbol}:`, updateError);
+            }
+          }
+
+          return {
+            ...item,
+            priceData,
+            alerts: alerts || [],
+          };
+        } catch (error) {
+          console.error(`Error fetching data for ${item.symbol}:`, error);
+          return {
+            ...item,
+            priceData: null,
+            alerts: [],
+          };
+        }
+      }),
+    );
+
+    const result = formatWatchlistForTelegram(enrichedWatchlist);
+    return {
+      response: result.response,
+      inlineKeyboard: result.inlineKeyboard,
+    };
   } catch (error) {
     console.error("Error handling watchlist command:", error);
-    return formatErrorForTelegram(
-      "An error occurred while fetching your watchlist. Please try again.",
-    );
+    return {
+      response: formatErrorForTelegram(
+        "An error occurred while fetching your watchlist. Please try again.",
+      ),
+    };
   }
 }
 
@@ -1705,6 +1844,9 @@ async function handleCallbackQuery(callbackQuery: any): Promise<void> {
     } else if (data.startsWith("menu_")) {
       // Handle menu navigation
       response = await handleMenuCallbackQuery(chatId, data, callbackQuery.from);
+    } else if (data.startsWith("watchlist_")) {
+      // Handle watchlist actions
+      response = await handleWatchlistCallbackQuery(chatId, data, callbackQuery.from);
     } else {
       response = "Unknown action. Please try again.";
     }
@@ -2045,7 +2187,9 @@ async function handleMenuCallbackQuery(
       if (!watchlistUser) {
         return formatAuthenticationPrompt();
       }
-      return await handleWatchlistCommand(chatId, watchlistUser);
+      const watchlistResult = await handleWatchlistCommand(chatId, watchlistUser);
+      await sendTelegramMessage(chatId, watchlistResult.response, watchlistResult.inlineKeyboard);
+      return "📋 Your watchlist";
       
     case "alerts":
       const alertUser = await authenticateUser(from.id, chatId);
@@ -2079,5 +2223,53 @@ async function handleMenuCallbackQuery(
       
     default:
       return "Unknown menu action. Please try again.";
+  }
+}
+
+async function handleWatchlistCallbackQuery(
+  chatId: string,
+  data: string,
+  from: any,
+): Promise<string> {
+  const action = data.replace("watchlist_", "");
+  
+  // Check authentication for all watchlist actions
+  const user = await authenticateUser(from.id, chatId);
+  if (!user) {
+    return formatAuthenticationPrompt();
+  }
+  
+  switch (action) {
+    case "research_all":
+      // Get all symbols from watchlist and research them
+      const { data: watchlist } = await supabase
+        .from("watchlist_items")
+        .select("symbol")
+        .eq("user_id", user.id)
+        .limit(5); // Limit to 5 to avoid overwhelming
+      
+      if (!watchlist || watchlist.length === 0) {
+        return "📭 Your watchlist is empty. Add some stocks first with /add [SYMBOL]";
+      }
+      
+      const symbols = watchlist.map(item => item.symbol);
+      const researchResult = await handleMultipleResearch(chatId, symbols);
+      await sendTelegramMessage(chatId, researchResult.response);
+      return "📊 Researching all watchlist stocks...";
+      
+    case "refresh":
+      // Refresh the watchlist display
+      const watchlistResult = await handleWatchlistCommand(chatId, user);
+      await sendTelegramMessage(chatId, watchlistResult.response, watchlistResult.inlineKeyboard);
+      return "🔄 Watchlist refreshed";
+      
+    case "add_new":
+      return "➕ **Add New Stock**\n\nType: `/add [SYMBOL]`\n\nExamples:\n• `/add AAPL`\n• `/add TSLA`\n• `/add GOOGL`\n\nOr use natural language:\n• \"Add Apple to my watchlist\"\n• \"Track Tesla stock\"";
+      
+    case "set_alerts":
+      return "🚨 **Set Price Alerts**\n\nType: `/alert [SYMBOL] [PRICE] [above/below]`\n\nExamples:\n• `/alert AAPL 200 above`\n• `/alert TSLA 150 below`\n\nOr use natural language:\n• \"Alert me when Apple goes above $200\"\n• \"Tell me if Tesla falls below $150\"";
+      
+    default:
+      return "Unknown watchlist action. Please try again.";
   }
 }
