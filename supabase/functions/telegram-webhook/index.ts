@@ -539,7 +539,7 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
 
   const formatted = watchlist
     .slice(0, 15)
-    .map((item, i) => {
+    .map((item) => {
       const symbol = item.symbol;
       const name = item.company_name || "N/A";
       
@@ -575,7 +575,7 @@ function formatWatchlistForTelegram(watchlist: any[]): { response: string; inlin
       let alertInfo = "";
       if (item.alerts && item.alerts.length > 0) {
         const alert = item.alerts[0]; // Show first alert
-        alertInfo = `\nAlert: $${alert.target_price} (${alert.alert_type})`;
+        alertInfo = `\nAlert: $${alert.target_price} (${alert.condition})`;
       } else {
         alertInfo = "\nNo alerts set";
       }
@@ -1488,7 +1488,7 @@ async function handleAlertCommand(
       user_id: profile.id,
       symbol: symbol,
       target_price: price,
-      alert_type: direction,
+      condition: direction,
       is_active: true,
     });
 
@@ -1552,8 +1552,8 @@ Example: /alert AAPL 150 above`;
     const alertList = alerts
       .slice(0, 10)
       .map((alert, i) => {
-        const direction = alert.alert_type === "above" ? "📈" : "📉";
-        return `${i + 1}. ${direction} *${alert.symbol}* - $${alert.target_price} ${alert.alert_type}`;
+        const direction = alert.condition === "above" ? "📈" : "📉";
+        return `${i + 1}. ${direction} *${alert.symbol}* - $${alert.target_price} ${alert.condition}`;
       })
       .join("\n");
 
@@ -1633,13 +1633,13 @@ async function handleWatchlistCommand(
             console.error(`📄 Error response body:`, errorText);
           }
 
-          // Fetch alert status
-          const { data: alerts } = await supabase
-            .from("alerts")
-            .select("target_price, alert_type")
-            .eq("user_id", user.id)
-            .eq("symbol", item.symbol)
-            .eq("is_active", true);
+                  // Fetch alert status
+        const { data: alerts } = await supabase
+          .from("alerts")
+          .select("target_price, condition")
+          .eq("user_id", user.id)
+          .eq("symbol", item.symbol)
+          .eq("is_active", true);
 
           // Update company name in database if we got it from price data
           if (priceData && priceData.name && priceData.name !== item.symbol) {
